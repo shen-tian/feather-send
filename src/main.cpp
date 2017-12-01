@@ -1,6 +1,5 @@
 #include <SPI.h>
 #include <RH_RF95.h>
-
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -8,13 +7,14 @@
 
 Adafruit_SSD1306 display = Adafruit_SSD1306();
 
+// Buttons
 #define Apin 9
 #define Bpin 6
 #define Cpin 5
 
 #define LED 13
 
-/* for feather32u4 */
+/* for feather M0 */
 #define RFM95_CS 8
 #define RFM95_RST 4
 #define RFM95_INT 3
@@ -417,5 +417,4 @@ void loop() {
   if (sinceLastDisplayUpdate < 0 || sinceLastDisplayUpdate > DISPLAY_INTERVAL) {
     updateDisplay();
   }
-
 }

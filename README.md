@@ -9,4 +9,9 @@ Ported over to PlatformIO from [electrosew](https://github.com/mloudon/electrose
 - 135 : SSA1306
 - 416 : TinyGPS
 
-platformio lib install X for each of the above
+To install them, go
+
+    platformio lib install 13
+    platformio lib install 124
+
+etc.
