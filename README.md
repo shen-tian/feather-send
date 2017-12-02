@@ -6,19 +6,14 @@ Ported over to PlatformIO from [electrosew](https://github.com/mrgriscom/electro
 
 Install `platformio`. Tested using 3.4.1.
 
-## Libs required:
+## Libs used:
 
-Not sure what the (if any) the right way to install all deps. But
-in the meanwhile:
+- Adafruit GFX
+- RadioHead
+- SSA1306
+- TinyGPS
 
-- 13 : Adafruit GFX
-- 124 : RadioHead
-- 135 : SSA1306
-- 416 : TinyGPS
-
-To install them, go
-
-    > pio lib install 13 124 135 416
+Should get installed automatically.
 
 Then, to build, go
 
