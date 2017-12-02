@@ -1,20 +1,22 @@
-#include <SPI.h>
 #include <RH_RF95.h>
-#include <Wire.h>
-#include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <TinyGPS.h>
+#include <Wire.h>
+#include <SPI.h>
+#include <Adafruit_GFX.h>
 
 Adafruit_SSD1306 display = Adafruit_SSD1306();
 
-// Buttons
+#define LINE_PX 8
+#define LINE_LEN 20
+
 #define Apin 9
 #define Bpin 6
 #define Cpin 5
 
 #define LED 13
 
-/* for feather M0 */
+/* for feather32u4 */
 #define RFM95_CS 8
 #define RFM95_RST 4
 #define RFM95_INT 3
@@ -30,7 +32,7 @@ RH_RF95 rf95(RFM95_CS, RFM95_INT);
 #define TRANSMIT_INTERVAL 10000      // interval between sending updates
 #define DISPLAY_INTERVAL 150      // interval between updating display
 #define MAX_FIX_AGE 5000   // Ignore data from GPS if older than this
-unsigned long lastSend, lastDisplay, lastFix, lastRecv;
+unsigned long lastSend, lastDisplay, lastFix;
 bool sending = false;
 
 // 95% error radius at HDOP=1
@@ -38,21 +40,38 @@ bool sending = false;
 
 #define ACCURACY_THRESHOLD 30  // m
 
-// tinyGPS
-TinyGPS gps;
+#define OTHER_LOC_STALENESS 120000
+
+// production - burning man
+#define MAN_LAT 40786600
+#define MAN_LON -119206600
+#define PLAYA_ELEV 1190.  // m
+#define SCALE 1.
 
 // production - afrikaburn
+/*
 #define MAN_LAT -32327403
 #define MAN_LON 19745329
 #define PLAYA_ELEV 320.  // m
 #define SCALE 1.
+*/
+
+// testing
+/*
+  #define MAN_LAT 40779625
+  #define MAN_LON -73965394
+  #define PLAYA_ELEV 0.  // m
+  #define SCALE 6.
+*/
+
+///// PLAYA COORDINATES CODE /////
 
 #define DEG_PER_RAD (180. / 3.1415926535)
 #define CLOCK_MINUTES (12 * 60)
 #define METERS_PER_DEGREE (40030230. / 360.)
 // Direction of north in clock units
-//#define NORTH 10.5  // hours
-//#define NUM_RINGS 13  // Esplanade through L
+#define NORTH 10.5  // hours
+#define NUM_RINGS 13  // Esplanade through L
 #define ESPLANADE_RADIUS (2500 * .3048)  // m
 #define FIRST_BLOCK_DEPTH (440 * .3048)  // m
 #define BLOCK_DEPTH (240 * .3048)  // m
@@ -64,29 +83,8 @@ TinyGPS gps;
 #define RADIAL_BUFFER .25  // hours
 
 //// overrides for afrikaburn
-#define NORTH 3.3333  // make 6ish approx line up with bearing 80 deg
-#define NUM_RINGS 0  // only give distance relative to clan
-
-
-#define MAGIC_NUMBER_LEN 2
-uint8_t MAGIC_NUMBER[MAGIC_NUMBER_LEN] = {0x02, 0xcb};
-
-//String timeStr = "";
-uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-int lastRSSI;
-
-// lat/lon are stored as signed 32-bit ints as millionths of a degree (-123.45678 => -123,456,780)
-int32_t myLat;
-int32_t myLon;
-float myElev;  // unused
-float myHAcc;
-bool amIAccurate;
-int32_t theirLat;
-int32_t theirLon;
-float theirElev;  // unused
-bool areTheyAccurate;
-
-///// PLAYA COORDINATES CODE /////
+//#define NORTH 3.3333  // make 6ish approx line up with bearing 80 deg
+//#define NUM_RINGS 0  // only give distance relative to clan
 
 
 // 0=man, 1=espl, 2=A, 3=B, ...
@@ -115,6 +113,14 @@ float ringInnerBuffer(int n) {
   }
 }
 
+int getReferenceRing(float dist) {
+  for (int n = NUM_RINGS; n > 0; n--) {
+    if (ringRadius(n) - ringInnerBuffer(n) <= dist) {
+      return n;
+    }
+  }
+  return 0;
+}
 
 String getRefDisp(int n) {
   if (n == 0) {
@@ -127,20 +133,83 @@ String getRefDisp(int n) {
 }
 
 
+TinyGPS gps;
+
+#define CALLSIGN_LEN 4
+
+bool buttonPressedState = false;
+long lastButtonPress = 0;
+#define buttonDebounceLockout 100
+
+typedef struct {
+  char callsign[CALLSIGN_LEN + 1] = {0x0, 0x0, 0x0, 0x0, 0x0}; // final null will never be overwritten
+  unsigned long timestamp;
+  // lat/lon are stored as signed 32-bit ints as millionths of a degree (-123.45678 => -123,456,780)
+  int32_t lat;
+  int32_t lon;
+  float elev;  // unused
+  float hAcc;
+  bool isAccurate;
+  int rssi;
+} fix;
+
+fix myLoc;
+#define MAX_OTHER_TRACKERS 5
+fix otherLocs[MAX_OTHER_TRACKERS];
+int activeLoc = 0;
+
+char callsign[] = "SPKL";
+//char callsign[] = "PONY";
+
+void say(String s, String t, String u, String v) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  display.println(s);
+  display.println(t);
+  display.println(u);
+  display.println(v);
+  display.display();
+}
+
+#define MAGIC_NUMBER_LEN 2
+uint8_t MAGIC_NUMBER[MAGIC_NUMBER_LEN] = {0x2c, 0x0b};
+
+uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+
 void processRecv() {
   for (int i = 0; i < MAGIC_NUMBER_LEN; i++) {
     if (MAGIC_NUMBER[i] != buf[i]) {
       return;
     }
   }
-  void* p = buf + MAGIC_NUMBER_LEN;
-  theirLat = *(int32_t*)p;
+  fix theirLoc;
+  for (int i = 0; i < CALLSIGN_LEN; i++) {
+    theirLoc.callsign[i] = buf[MAGIC_NUMBER_LEN + i];
+  }
+  void* p = buf + MAGIC_NUMBER_LEN + CALLSIGN_LEN;
+  theirLoc.lat = *(int32_t*)p;
   p = (int32_t*)p + 1;
-  theirLon = *(int32_t*)p;
+  theirLoc.lon = *(int32_t*)p;
   p = (int32_t*)p + 1;
-  areTheyAccurate = *(uint8_t*)p;
-  lastRecv = millis();
+  theirLoc.isAccurate = *(uint8_t*)p;
+  theirLoc.timestamp = millis();
+  theirLoc.rssi = rf95.lastRssi();
+
+  int slot = 0; // will displace first if all slots are full
+  for (int i = 0; i < MAX_OTHER_TRACKERS; i++) {
+    if (strlen(otherLocs[i].callsign) == 0 || strcmp(theirLoc.callsign, otherLocs[i].callsign) == 0) {
+      slot = i;
+      break;
+    }
+  }
+  otherLocs[slot] = theirLoc;
 }
+
+// set > 1 to simulate more than one tracker for testing purposes
+int numVirtualTrackers = 1;
+int virtualTrackerNum = 0;
 
 void transmitData() {
   long sinceLastFix = millis() - lastFix;
@@ -149,17 +218,25 @@ void transmitData() {
     return;
   }
 
-  uint8_t len = 2 * sizeof(int32_t) + sizeof(uint8_t) + MAGIC_NUMBER_LEN + 1;
+  uint8_t len = 2 * sizeof(int32_t) + sizeof(uint8_t) + CALLSIGN_LEN + MAGIC_NUMBER_LEN + 1;
   uint8_t radiopacket[len];
   for (int i = 0; i < MAGIC_NUMBER_LEN; i++) {
     radiopacket[i] = MAGIC_NUMBER[i];
   }
-  void* p = radiopacket + MAGIC_NUMBER_LEN;
-  *(int32_t*)p = myLat;
+  for (int i = 0; i < CALLSIGN_LEN; i++) {
+    radiopacket[MAGIC_NUMBER_LEN + i] = myLoc.callsign[i];
+
+    if (numVirtualTrackers > 1 && i == strlen(myLoc.callsign) - 1) {
+      radiopacket[MAGIC_NUMBER_LEN + i] += virtualTrackerNum;
+      virtualTrackerNum = (virtualTrackerNum + 1) % numVirtualTrackers;
+    }
+  }
+  void* p = radiopacket + MAGIC_NUMBER_LEN + CALLSIGN_LEN;
+  *(int32_t*)p = myLoc.lat;
   p = (int32_t*)p + 1;
-  *(int32_t*)p = myLon;
+  *(int32_t*)p = myLoc.lon;
   p = (int32_t*)p + 1;
-  *(uint8_t*)p = amIAccurate;
+  *(uint8_t*)p = myLoc.isAccurate;
   radiopacket[len - 1] = '\0';
 
   sending = true;
@@ -191,26 +268,25 @@ void setFix () {
     lat = 0;
     lon = 0;
   }
-  //  Serial.println(String(flat, 6) + " " + String(flon, 6));
-  myLat = lat;
-  myLon = lon;
+//  Serial.println(String(flat, 6) + " " + String(flon, 6));
+  myLoc.lat = lat;
+  myLoc.lon = lon;
 
   if (gps.hdop() == TinyGPS::GPS_INVALID_HDOP) {
-    myHAcc = -1;
+    myLoc.hAcc = -1;
   } else {
-    myHAcc = 1e-2 * gps.hdop() * GPS_BASE_ACCURACY;
+    myLoc.hAcc = 1e-2 * gps.hdop() * GPS_BASE_ACCURACY;
   }
-  amIAccurate = (myHAcc > 0 && myHAcc <= ACCURACY_THRESHOLD);
+  myLoc.isAccurate = (myLoc.hAcc > 0 && myLoc.hAcc <= ACCURACY_THRESHOLD);
 }
-
 
 void attemptUpdateFix() {
   //setFixTime();
   setFix();
 }
 
-String fixAge() {
-  long elapsed = (millis() - lastRecv) / 1000;
+String fixAge(unsigned long timestamp) {
+  long elapsed = (millis() - timestamp) / 1000;
   int n;
   char unit;
   if (elapsed < 2) {
@@ -228,15 +304,43 @@ String fixAge() {
   return String(n) + String(unit) + " ago";
 }
 
-int getReferenceRing(float dist) {
-  for (int n = NUM_RINGS; n > 0; n--) {
-    Serial.println(n + ":" + String(ringRadius(n)) + " " + String(ringInnerBuffer(n)));
-    if (ringRadius(n) - ringInnerBuffer(n) <= dist) {
-
-      return n;
+int getNumTrackers() {
+  int i;
+  for (i = 0; i < MAX_OTHER_TRACKERS; i++) {
+    if (strlen(otherLocs[i].callsign) == 0) {
+      break;
     }
   }
-  return 0;
+  return i;
+}
+
+String getCallsigns() {
+  int count = getNumTrackers();
+  if (count == 0) {
+    return "all alone";
+  }
+  String s = "";
+  for (int i = 0; i < count; i++) {
+    int slot = (activeLoc + i) % count;
+    if (i == 0) {
+      s.concat(">");
+    }
+    String cs = String(otherLocs[slot].callsign);
+    if (millis() - otherLocs[slot].timestamp > OTHER_LOC_STALENESS) {
+      cs.toLowerCase();
+    } else {
+      cs.toUpperCase();
+    }
+    s.concat(cs);
+    //if (i == 0) {
+    //  s.concat("]");
+    //}
+    s.concat(" ");
+    if (s.length() > LINE_LEN) {
+      break;
+    }
+  }
+  return s.substring(0, LINE_LEN);
 }
 
 String playaStr(int32_t lat, int32_t lon, bool accurate) {
@@ -271,25 +375,31 @@ String playaStr(int32_t lat, int32_t lon, bool accurate) {
   return clock_disp + " & " + getRefDisp(refRing) + (refDeltaRounded >= 0 ? "+" : "-") + String(refDeltaRounded < 0 ? -refDeltaRounded : refDeltaRounded) + "m" + (accurate ? "" : "-ish");
 }
 
-String fmtPlayaStr(int32_t lat, int32_t lon, bool accurate) {
-  if (lat == 0 && lon == 0) {
-    return "404 cosmos not found";
+String fmtPlayaStr(fix* loc, char nofixstr[]) {
+  if (loc->lat == 0 && loc->lon == 0) {
+    return nofixstr;
   } else {
-    return playaStr(lat, lon, accurate);
+    return playaStr(loc->lat, loc->lon, loc->isAccurate);
   }
 }
 
 void updateDisplay() {
+  fix theirLoc = otherLocs[activeLoc];
+  int count = getNumTrackers();
+
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setCursor(0, 0);
-  display.println(fmtPlayaStr(theirLat, theirLon, areTheyAccurate));
-  display.println(fixAge());
-  display.println();
-  display.println(fmtPlayaStr(myLat, myLon, amIAccurate));
-  display.setCursor(60, 8);
-  display.println(String(lastRSSI) + "db");
+  display.println(getCallsigns());
+  if (count > 0) {
+    display.println(fmtPlayaStr(&theirLoc, ""));
+    display.println(fixAge(theirLoc.timestamp));
+    display.setCursor(60, 2*LINE_PX);
+    display.println(String(theirLoc.rssi) + "db");
+  }
+  display.setCursor(0, 3*LINE_PX);
+  display.println(fmtPlayaStr(&myLoc, "and lost"));
 
   String fixStatus = "";
   long sinceLastFix = millis() - lastFix;
@@ -300,41 +410,13 @@ void updateDisplay() {
   } else if (sending || (sinceLastSend >= 0 && sinceLastSend < 400)) {
     fixStatus = ".";
   }
-  display.setCursor(120, 24);
+  display.setCursor(120, 3*LINE_PX);
   display.println(fixStatus);
 
   display.display();
 
   lastDisplay = millis();
 }
-
-void say(String s, String t, String u, String v) {
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0, 0);
-  display.println(s);
-  display.println(t);
-  display.println(u);
-  display.println(v);
-  display.display();
-}
-
-// production - burning man
-/*
-  #define MAN_LAT 40786400
-  #define MAN_LON -119206500
-  #define PLAYA_ELEV 1190.  // m
-  #define SCALE 1.
-*/
-// testing
-/*
-  #define MAN_LAT 40779625
-  #define MAN_LON -73965394
-  #define PLAYA_ELEV 0.  // m
-  #define SCALE 6.
-*/
-
 
 //void setFixTime() {
 //  int year;
@@ -346,6 +428,10 @@ void say(String s, String t, String u, String v) {
 
 
 void setup() {
+  strcpy(myLoc.callsign, callsign);
+
+  pinMode(Cpin, INPUT_PULLUP);
+
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
 
@@ -357,7 +443,7 @@ void setup() {
 
   // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
-  say("hello.", "", "", "");
+  say("hello " + String(myLoc.callsign) + ".", "", "", "");
   delay(3000);
   display.clearDisplay();
 
@@ -368,13 +454,13 @@ void setup() {
   delay(10);
 
   while (!rf95.init()) {
-    say("LoRa radio init failed", "", "", "");
+    say("x0", "", "", "");
     while (1);
   }
 
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
   if (!rf95.setFrequency(RF95_FREQ)) {
-    say("setFrequency failed", "", "", "");
+    say("x1", "", "", "");
     while (1);
   }
 
@@ -385,14 +471,30 @@ void setup() {
   // you can set transmitter powers from 5 to 23 dBm:
   rf95.setTxPower(23, false);
 
-  Serial.begin(9600);
+  //Serial.begin(9600);
   Serial1.begin(9600);
 }
 
 void loop() {
+  bool buttonPressed = !digitalRead(Cpin);
+  if (buttonPressed != buttonPressedState) {
+    // button state change
+    if (millis() - lastButtonPress > buttonDebounceLockout) {
+      // state change is not noise
+      if (buttonPressed) {
+        // button is pressed -- trigger action
+        int count = getNumTrackers();
+        if (count > 0) {
+          activeLoc = (activeLoc + 1) % count;
+        }
+      }
+    }
+    lastButtonPress = millis();
+  }
+  buttonPressedState = buttonPressed;
+
   if (Serial1.available()) {
     char c = Serial1.read();
-    //Serial.write(c);
     if (gps.encode(c)) { // Did a new valid sentence come in?
       attemptUpdateFix();
     }
@@ -401,7 +503,6 @@ void loop() {
   if (rf95.available()) {
     uint8_t len = sizeof(buf);
     if (rf95.recv(buf, &len)) {
-      lastRSSI = rf95.lastRssi();
       digitalWrite(LED, HIGH);
       digitalWrite(LED, LOW);
       processRecv();
@@ -417,4 +518,5 @@ void loop() {
   if (sinceLastDisplayUpdate < 0 || sinceLastDisplayUpdate > DISPLAY_INTERVAL) {
     updateDisplay();
   }
+
 }
