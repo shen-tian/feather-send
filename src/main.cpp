@@ -158,7 +158,7 @@ fix myLoc;
 fix otherLocs[MAX_OTHER_TRACKERS];
 int activeLoc = 0;
 
-char callsign[] = "SPKL";
+char callsign[] = "BMO ";
 //char callsign[] = "PONY";
 
 void say(String s, String t, String u, String v) {

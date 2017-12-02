@@ -1,6 +1,10 @@
 # Tracker code
 
-Ported over to PlatformIO from [electrosew](https://github.com/mloudon/electrosew/tree/master/feather_send)
+Ported over to PlatformIO from [electrosew](https://github.com/mrgriscom/electrosew/blob/master/feather_send/feather_send.ino). This is the multi-agent version. It's configured for a Feather M0 based board, but should run fine on a 32u4 Feather too.
+
+## Setup
+
+Install `platformio`. Tested using 3.4.1.
 
 ## Libs required:
 
@@ -13,10 +17,25 @@ To install them, go
 
     platformio lib install 13
     platformio lib install 124
+    platformio lib install 135
+    platformio lib install 416
 
-etc.
+Then, to build, go
 
-## Emac setup
+    > pio run
+
+To upload
+
+    > pio --target upload
+
+## Emacs setup
+
+`package-install` `platform-io` mode. Not clear what this should hook onto
+so enable it manually in the `main.cpp` buffer. This also need `Projectile`
+to be installed, so it can find the root folder (thus also need this to
+be a git repo).
+
+Once that's done, `C-c i b` to build, and `C-c i u` to upload.
 
 Had some funny colors in the `*compilation*` buffer.
 
@@ -33,5 +52,3 @@ Had some funny colors in the `*compilation*` buffer.
 ````
 
 this seems to have helped?
-
-Otherwise, install `platformio-mode` from MELPA
