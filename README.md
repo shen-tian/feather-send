@@ -8,6 +8,9 @@ Install `platformio`. Tested using 3.4.1.
 
 ## Libs required:
 
+Not sure what the (if any) the right way to install all deps. But
+in the meanwhile:
+
 - 13 : Adafruit GFX
 - 124 : RadioHead
 - 135 : SSA1306
@@ -15,10 +18,7 @@ Install `platformio`. Tested using 3.4.1.
 
 To install them, go
 
-    platformio lib install 13
-    platformio lib install 124
-    platformio lib install 135
-    platformio lib install 416
+    > pio lib install 13 124 135 416
 
 Then, to build, go
 
@@ -28,18 +28,24 @@ To upload
 
     > pio --target upload
 
+## IDE setup
+
+Atom/VSCode something. Who knows.
+
 ## Emacs setup
 
 `package-install` `platform-io` mode. Not clear what this should hook onto
-so enable it manually in the `main.cpp` buffer. This also need `Projectile`
-to be installed, so it can find the root folder (thus also need this to
-be a git repo).
+so enable it manually in the `main.cpp` buffer. (Assume we don't want
+this for all `.cpp` files?) This also need `Projectile`, and the code
+need to be in a repo, so it can find the root folder.
 
 Once that's done, `C-c i b` to build, and `C-c i u` to upload.
 
+* Potential issue: *
+
 Had some funny colors in the `*compilation*` buffer.
 
-````
+````elisp
 (add-hook 'eshell-preoutput-filter-functions
            'ansi-color-filter-apply)
 

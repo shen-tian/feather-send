@@ -5,18 +5,18 @@
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 
-Adafruit_SSD1306 display = Adafruit_SSD1306();
+// Pin layout
 
-#define LINE_PX 8
-#define LINE_LEN 20
+// Push buttons on the OLED wing
+#define A_PIN 9
+#define B_PIN 6
+#define C_PIN 5
 
-#define Apin 9
-#define Bpin 6
-#define Cpin 5
+// Builtin LED
+#define LED_PIN 13
 
-#define LED 13
-
-/* for feather32u4 */
+//LoRA radio for feather m0
+// INT is different for 32u4 feather
 #define RFM95_CS 8
 #define RFM95_RST 4
 #define RFM95_INT 3
@@ -24,16 +24,70 @@ Adafruit_SSD1306 display = Adafruit_SSD1306();
 // Change to 434.0 or other frequency, must match RX's freq!
 #define RF95_FREQ 915.0
 
+// Dimension of the display
+#define LINE_PX 8
+#define LINE_LEN 20
+
+// Init display
+Adafruit_SSD1306 display = Adafruit_SSD1306();
+
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
+// GPS
+TinyGPS gps;
 
-// timing
-#define TRANSMIT_INTERVAL 10000      // interval between sending updates
-#define DISPLAY_INTERVAL 150      // interval between updating display
-#define MAX_FIX_AGE 5000   // Ignore data from GPS if older than this
+// Timing:
+#define TRANSMIT_INTERVAL 10000 // interval between sending updates
+#define DISPLAY_INTERVAL 150    // interval between updating display
+#define MAX_FIX_AGE 5000        // Ignore data from GPS if older
+
+// State var for radio/fix
 unsigned long lastSend, lastDisplay, lastFix;
 bool sending = false;
+
+#define DEBOUNCE_LOCKOUT 100
+
+// State var for buttons
+bool buttonPressedState = false;
+long lastButtonPress = 0;
+
+#define CALLSIGN_LEN 4
+#define CALLSIGN "BMO+"
+
+#define MAX_OTHER_TRACKERS 5
+
+typedef struct {
+  // final null will never be overwritten
+  char callsign[CALLSIGN_LEN + 1] = {0x0, 0x0, 0x0, 0x0, 0x0};
+  unsigned long timestamp;
+  // lat/lon are stored as signed 32-bit ints as millionths
+  // of a degree (-123.45678 => -123,456,780)
+  int32_t lat;
+  int32_t lon;
+  float elev;  // unused
+  float hAcc;
+  bool isAccurate;
+  int rssi;
+} fix;
+
+fix myLoc;
+fix otherLocs[MAX_OTHER_TRACKERS];
+int activeLoc = 0;
+
+#define MAGIC_NUMBER_LEN 2
+
+uint8_t MAGIC_NUMBER[MAGIC_NUMBER_LEN] = {0x2c, 0x0b};
+
+uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
+
+// set > 1 to simulate more than one tracker for testing purposes
+int numVirtualTrackers = 1;
+int virtualTrackerNum = 0;
+
+
+
+// Start the geometry geography stuff
 
 // 95% error radius at HDOP=1
 #define GPS_BASE_ACCURACY 6.2  // m
@@ -86,7 +140,6 @@ bool sending = false;
 //#define NORTH 3.3333  // make 6ish approx line up with bearing 80 deg
 //#define NUM_RINGS 0  // only give distance relative to clan
 
-
 // 0=man, 1=espl, 2=A, 3=B, ...
 float ringRadius(int n) {
   if (n == 0) {
@@ -132,39 +185,49 @@ String getRefDisp(int n) {
   }
 }
 
+String playaStr(int32_t lat, int32_t lon, bool accurate) {
+  // Safe conversion to float w/o precision loss.
+  float dlat = 1e-6 * (lat - MAN_LAT);
+  float dlon = 1e-6 * (lon - MAN_LON);
 
-TinyGPS gps;
+  float m_dx = dlon * METERS_PER_DEGREE * cos(1e-6 * MAN_LAT / DEG_PER_RAD);
+  float m_dy = dlat * METERS_PER_DEGREE;
 
-#define CALLSIGN_LEN 4
+  float dist = SCALE * sqrt(m_dx * m_dx + m_dy * m_dy);
+  float bearing = DEG_PER_RAD * atan2(m_dx, m_dy);
 
-bool buttonPressedState = false;
-long lastButtonPress = 0;
-#define buttonDebounceLockout 100
+  float clock_hours = (bearing / 360. * 12. + NORTH);
+  int clock_minutes = (int)(clock_hours * 60 + .5);
+  // Force into the range [0, CLOCK_MINUTES)
+  clock_minutes = ((clock_minutes % CLOCK_MINUTES) + CLOCK_MINUTES) % CLOCK_MINUTES;
 
-typedef struct {
-  char callsign[CALLSIGN_LEN + 1] = {0x0, 0x0, 0x0, 0x0, 0x0}; // final null will never be overwritten
-  unsigned long timestamp;
-  // lat/lon are stored as signed 32-bit ints as millionths of a degree (-123.45678 => -123,456,780)
-  int32_t lat;
-  int32_t lon;
-  float elev;  // unused
-  float hAcc;
-  bool isAccurate;
-  int rssi;
-} fix;
+  int hour = clock_minutes / 60;
+  int minute = clock_minutes % 60;
+  String clock_disp = String(hour) + ":" + (minute < 10 ? "0" : "") + String(minute);
 
-fix myLoc;
-#define MAX_OTHER_TRACKERS 5
-fix otherLocs[MAX_OTHER_TRACKERS];
-int activeLoc = 0;
+  int refRing;
+  if (6 - abs(clock_minutes/60. - 6) < RADIAL_GAP - RADIAL_BUFFER) {
+    refRing = 0;
+  } else {
+    refRing = getReferenceRing(dist);
+  }
+  float refDelta = dist - ringRadius(refRing);
+  long refDeltaRounded = (long)(refDelta + .5);
 
-char callsign[] = "BMO ";
-//char callsign[] = "PONY";
+  return clock_disp + " & " + getRefDisp(refRing) + (refDeltaRounded >= 0 ? "+" : "-") + String(refDeltaRounded < 0 ? -refDeltaRounded : refDeltaRounded) + "m" + (accurate ? "" : "-ish");
+}
 
+String fmtPlayaStr(fix* loc, char nofixstr[]) {
+  if (loc->lat == 0 && loc->lon == 0) {
+    return nofixstr;
+  } else {
+    return playaStr(loc->lat, loc->lon, loc->isAccurate);
+  }
+}
+
+// 4-line display
 void say(String s, String t, String u, String v) {
   display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
   display.setCursor(0, 0);
   display.println(s);
   display.println(t);
@@ -173,10 +236,6 @@ void say(String s, String t, String u, String v) {
   display.display();
 }
 
-#define MAGIC_NUMBER_LEN 2
-uint8_t MAGIC_NUMBER[MAGIC_NUMBER_LEN] = {0x2c, 0x0b};
-
-uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
 
 void processRecv() {
   for (int i = 0; i < MAGIC_NUMBER_LEN; i++) {
@@ -206,10 +265,6 @@ void processRecv() {
   }
   otherLocs[slot] = theirLoc;
 }
-
-// set > 1 to simulate more than one tracker for testing purposes
-int numVirtualTrackers = 1;
-int virtualTrackerNum = 0;
 
 void transmitData() {
   long sinceLastFix = millis() - lastFix;
@@ -343,53 +398,13 @@ String getCallsigns() {
   return s.substring(0, LINE_LEN);
 }
 
-String playaStr(int32_t lat, int32_t lon, bool accurate) {
-  // Safe conversion to float w/o precision loss.
-  float dlat = 1e-6 * (lat - MAN_LAT);
-  float dlon = 1e-6 * (lon - MAN_LON);
-
-  float m_dx = dlon * METERS_PER_DEGREE * cos(1e-6 * MAN_LAT / DEG_PER_RAD);
-  float m_dy = dlat * METERS_PER_DEGREE;
-
-  float dist = SCALE * sqrt(m_dx * m_dx + m_dy * m_dy);
-  float bearing = DEG_PER_RAD * atan2(m_dx, m_dy);
-
-  float clock_hours = (bearing / 360. * 12. + NORTH);
-  int clock_minutes = (int)(clock_hours * 60 + .5);
-  // Force into the range [0, CLOCK_MINUTES)
-  clock_minutes = ((clock_minutes % CLOCK_MINUTES) + CLOCK_MINUTES) % CLOCK_MINUTES;
-
-  int hour = clock_minutes / 60;
-  int minute = clock_minutes % 60;
-  String clock_disp = String(hour) + ":" + (minute < 10 ? "0" : "") + String(minute);
-
-  int refRing;
-  if (6 - abs(clock_minutes/60. - 6) < RADIAL_GAP - RADIAL_BUFFER) {
-    refRing = 0;
-  } else {
-    refRing = getReferenceRing(dist);
-  }
-  float refDelta = dist - ringRadius(refRing);
-  long refDeltaRounded = (long)(refDelta + .5);
-
-  return clock_disp + " & " + getRefDisp(refRing) + (refDeltaRounded >= 0 ? "+" : "-") + String(refDeltaRounded < 0 ? -refDeltaRounded : refDeltaRounded) + "m" + (accurate ? "" : "-ish");
-}
-
-String fmtPlayaStr(fix* loc, char nofixstr[]) {
-  if (loc->lat == 0 && loc->lon == 0) {
-    return nofixstr;
-  } else {
-    return playaStr(loc->lat, loc->lon, loc->isAccurate);
-  }
-}
 
 void updateDisplay() {
   fix theirLoc = otherLocs[activeLoc];
   int count = getNumTrackers();
 
   display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
+
   display.setCursor(0, 0);
   display.println(getCallsigns());
   if (count > 0) {
@@ -427,27 +442,11 @@ void updateDisplay() {
 //}
 
 
-void setup() {
-  strcpy(myLoc.callsign, callsign);
-
-  pinMode(Cpin, INPUT_PULLUP);
-
+void initRadio(){
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
 
-  pinMode(LED, OUTPUT);
-
-  pinMode(Apin, INPUT_PULLUP);
-  pinMode(Bpin, INPUT_PULLUP);
-  pinMode(Cpin, INPUT_PULLUP);
-
-  // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);  // initialize with the I2C addr 0x3C (for the 128x32)
-  say("hello " + String(myLoc.callsign) + ".", "", "", "");
-  delay(3000);
-  display.clearDisplay();
-
-  // manual reset
+  // Manual reset
   digitalWrite(RFM95_RST, LOW);
   delay(10);
   digitalWrite(RFM95_RST, HIGH);
@@ -458,28 +457,50 @@ void setup() {
     while (1);
   }
 
-  // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
+  // Defaults after init are 434.0MHz, 13dBm using PA_BOOST
+  // Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
+  // modulation GFSK_Rb250Fd250
+  // If you are using RFM95/96/97/98 modules which uses the
+  // PA_BOOST transmitter pin, then you can set transmitter
+  // powers from 5 to 23 dBm:
+
   if (!rf95.setFrequency(RF95_FREQ)) {
     say("x1", "", "", "");
     while (1);
   }
-
-  // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
-
-  // The default transmitter power is 13dBm, using PA_BOOST.
-  // If you are using RFM95/96/97/98 modules which uses the PA_BOOST transmitter pin, then
-  // you can set transmitter powers from 5 to 23 dBm:
   rf95.setTxPower(23, false);
+}
 
-  //Serial.begin(9600);
+void initDisplay(){
+  // initialize with the I2C addr 0x3C (for the 128x32)
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+
+  say("hello " + String(myLoc.callsign) + ".", "", "", "");
+  delay(3000);
+  display.clearDisplay();
+}
+
+// Main
+
+void setup() {
+  strcpy(myLoc.callsign, CALLSIGN);
+
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(C_PIN, INPUT_PULLUP);
+
+  initDisplay();
+  initRadio();
+
   Serial1.begin(9600);
 }
 
 void loop() {
-  bool buttonPressed = !digitalRead(Cpin);
+  bool buttonPressed = !digitalRead(C_PIN);
   if (buttonPressed != buttonPressedState) {
     // button state change
-    if (millis() - lastButtonPress > buttonDebounceLockout) {
+    if (millis() - lastButtonPress > DEBOUNCE_LOCKOUT) {
       // state change is not noise
       if (buttonPressed) {
         // button is pressed -- trigger action
@@ -503,8 +524,8 @@ void loop() {
   if (rf95.available()) {
     uint8_t len = sizeof(buf);
     if (rf95.recv(buf, &len)) {
-      digitalWrite(LED, HIGH);
-      digitalWrite(LED, LOW);
+      digitalWrite(LED_PIN, HIGH);
+      digitalWrite(LED_PIN, LOW);
       processRecv();
     }
   }
@@ -518,5 +539,4 @@ void loop() {
   if (sinceLastDisplayUpdate < 0 || sinceLastDisplayUpdate > DISPLAY_INTERVAL) {
     updateDisplay();
   }
-
 }
