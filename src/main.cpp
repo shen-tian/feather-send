@@ -53,7 +53,7 @@ bool buttonPressedState = false;
 long lastButtonPress = 0;
 
 #define CALLSIGN_LEN 4
-#define CALLSIGN "BMO+"
+#define CALLSIGN "BUTT"
 
 #define MAX_OTHER_TRACKERS 5
 
@@ -97,18 +97,17 @@ int virtualTrackerNum = 0;
 #define OTHER_LOC_STALENESS 120000
 
 // production - burning man
-#define MAN_LAT 40786600
-#define MAN_LON -119206600
-#define PLAYA_ELEV 1190.  // m
-#define SCALE 1.
+// #define MAN_LAT 40786600
+// #define MAN_LON -119206600
+// #define PLAYA_ELEV 1190.  // m
+// #define SCALE 1.
 
 // production - afrikaburn
-/*
+
 #define MAN_LAT -32327403
 #define MAN_LON 19745329
 #define PLAYA_ELEV 320.  // m
 #define SCALE 1.
-*/
 
 // testing
 /*
@@ -137,8 +136,8 @@ int virtualTrackerNum = 0;
 #define RADIAL_BUFFER .25  // hours
 
 //// overrides for afrikaburn
-//#define NORTH 3.3333  // make 6ish approx line up with bearing 80 deg
-//#define NUM_RINGS 0  // only give distance relative to clan
+#define NORTH 3.3333  // make 6ish approx line up with bearing 80 deg
+#define NUM_RINGS 0  // only give distance relative to clan
 
 // 0=man, 1=espl, 2=A, 3=B, ...
 float ringRadius(int n) {
