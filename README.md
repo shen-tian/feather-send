@@ -29,10 +29,25 @@ Atom/VSCode something. Who knows.
 
 ## Emacs setup
 
-`package-install` `platform-io` mode. Not clear what this should hook onto
-so enable it manually in the `main.cpp` buffer. (Assume we don't want
-this for all `.cpp` files?) This also need `Projectile`, and the code
-need to be in a repo, so it can find the root folder.
+`package-install` `platformio-mode`. I'm grabbing it from Melpa Stable.
+This also need `Projectile`, and the code need to be in a repo, so it can
+find the root folder.
+
+The following snippest allows you to automatically load `platformio-mode`.
+
+```elisp
+(defun platformio-conditionally-enable ()
+  "Enable `platformio-mode' only when a `platformio.ini' file is present in project root."
+  (condition-case nil
+      (when (projectile-verify-file "platformio.ini")
+        (platformio-mode 1))
+    (error nil)))
+
+;; Enable irony for all c++ files, and platformio-mode only
+;; when needed (platformio.ini present in project root).
+(add-hook 'c++-mode-hook (lambda ()
+                           (platformio-conditionally-enable)))
+```
 
 Once that's done, `C-c i b` to build, and `C-c i u` to upload.
 
@@ -40,7 +55,7 @@ Once that's done, `C-c i b` to build, and `C-c i u` to upload.
 
 Had some funny colors in the `*compilation*` buffer.
 
-````elisp
+```elisp
 (add-hook 'eshell-preoutput-filter-functions
            'ansi-color-filter-apply)
 
@@ -50,6 +65,6 @@ Had some funny colors in the `*compilation*` buffer.
   (ansi-color-apply-on-region compilation-filter-start (point))
   (toggle-read-only))
 (add-hook 'compilation-filter-hook 'colorize-compilation-buffer)
-````
+```
 
 this seems to have helped?
