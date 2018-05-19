@@ -4,6 +4,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
+#include <Bounce2.h>
 
 // Pin layout
 
@@ -34,6 +35,8 @@ Adafruit_SSD1306 display = Adafruit_SSD1306();
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
+Bounce debouncer = Bounce();
+
 // GPS
 TinyGPS gps;
 
@@ -45,12 +48,6 @@ TinyGPS gps;
 // State var for radio/fix
 unsigned long lastSend, lastDisplay, lastFix;
 bool sending = false;
-
-#define DEBOUNCE_LOCKOUT 100
-
-// State var for buttons
-bool buttonPressedState = false;
-long lastButtonPress = 0;
 
 #define CALLSIGN_LEN 4
 #define CALLSIGN "BUTT"
@@ -84,8 +81,6 @@ uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
 // set > 1 to simulate more than one tracker for testing purposes
 int numVirtualTrackers = 1;
 int virtualTrackerNum = 0;
-
-
 
 // Start the geometry geography stuff
 
@@ -123,8 +118,8 @@ int virtualTrackerNum = 0;
 #define CLOCK_MINUTES (12 * 60)
 #define METERS_PER_DEGREE (40030230. / 360.)
 // Direction of north in clock units
-#define NORTH 10.5  // hours
-#define NUM_RINGS 13  // Esplanade through L
+// #define NORTH 10.5  // hours
+// #define NUM_RINGS 13  // Esplanade through L
 #define ESPLANADE_RADIUS (2500 * .3048)  // m
 #define FIRST_BLOCK_DEPTH (440 * .3048)  // m
 #define BLOCK_DEPTH (240 * .3048)  // m
@@ -246,6 +241,7 @@ void processRecv() {
   for (int i = 0; i < CALLSIGN_LEN; i++) {
     theirLoc.callsign[i] = buf[MAGIC_NUMBER_LEN + i];
   }
+
   void* p = buf + MAGIC_NUMBER_LEN + CALLSIGN_LEN;
   theirLoc.lat = *(int32_t*)p;
   p = (int32_t*)p + 1;
@@ -397,6 +393,11 @@ String getCallsigns() {
   return s.substring(0, LINE_LEN);
 }
 
+String locationString(fix* loc, char nofixstr[])
+{
+
+  return "Somewhere";
+}
 
 void updateDisplay() {
   fix theirLoc = otherLocs[activeLoc];
@@ -407,7 +408,7 @@ void updateDisplay() {
   display.setCursor(0, 0);
   display.println(getCallsigns());
   if (count > 0) {
-    display.println(fmtPlayaStr(&theirLoc, ""));
+    display.println(locationString(&theirLoc, ""));
     display.println(fixAge(theirLoc.timestamp));
     display.setCursor(60, 2*LINE_PX);
     display.println(String(theirLoc.rssi) + "db");
@@ -427,6 +428,14 @@ void updateDisplay() {
   display.setCursor(120, 3*LINE_PX);
   display.println(fixStatus);
 
+  float measuredvbat = analogRead(A7);
+  measuredvbat *= (2 * 3.3 / 1024);
+  char buff[8];
+  sprintf(buff, "%.2fV", measuredvbat);
+
+  display.setCursor(90, 0);
+  display.println(buff);
+
   display.display();
 
   lastDisplay = millis();
@@ -439,7 +448,6 @@ void updateDisplay() {
 //  gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
 //  timeStr =  String(hour) + ":" + String(minute) + ":" +  String(second) + "/" + String(age) + "ms";
 //}
-
 
 void initRadio(){
   pinMode(RFM95_RST, OUTPUT);
@@ -493,25 +501,23 @@ void setup() {
   initRadio();
 
   Serial1.begin(9600);
+
+  debouncer.attach(C_PIN);
+  debouncer.interval(5); // interval in ms
 }
 
 void loop() {
-  bool buttonPressed = !digitalRead(C_PIN);
-  if (buttonPressed != buttonPressedState) {
-    // button state change
-    if (millis() - lastButtonPress > DEBOUNCE_LOCKOUT) {
-      // state change is not noise
-      if (buttonPressed) {
-        // button is pressed -- trigger action
-        int count = getNumTrackers();
-        if (count > 0) {
-          activeLoc = (activeLoc + 1) % count;
-        }
-      }
+
+  debouncer.update();
+
+  if (debouncer.fell()) {
+    // button is pressed -- trigger action
+    int count = getNumTrackers();
+    if (count > 0) {
+      activeLoc = (activeLoc + 1) % count;
     }
-    lastButtonPress = millis();
   }
-  buttonPressedState = buttonPressed;
+
 
   if (Serial1.available()) {
     char c = Serial1.read();
