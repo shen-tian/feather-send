@@ -35,7 +35,8 @@ Adafruit_SSD1306 display = Adafruit_SSD1306();
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
-Bounce debouncer = Bounce();
+Bounce buttonB = Bounce();
+Bounce buttonC = Bounce();
 
 // GPS
 TinyGPS gps;
@@ -70,7 +71,12 @@ typedef struct {
 
 fix myLoc;
 fix otherLocs[MAX_OTHER_TRACKERS];
+
+int numSats = -1;
 int activeLoc = 0;
+int altitude = -1;
+
+int dispMode = 0;
 
 #define MAGIC_NUMBER_LEN 2
 
@@ -320,6 +326,9 @@ void setFix () {
     myLoc.hAcc = 1e-2 * gps.hdop() * GPS_BASE_ACCURACY;
   }
   myLoc.isAccurate = (myLoc.hAcc > 0 && myLoc.hAcc <= ACCURACY_THRESHOLD);
+
+  numSats = gps.satellites();
+  altitude = gps.altitude();
 }
 
 void setFixTime() {
@@ -330,7 +339,7 @@ void setFixTime() {
   char timeStr[20];
   char ageStr[20];
   sprintf(timeStr, "%02d:%02d:%02d.%0d2", hour, minute, second, hundredths);
-  sprintf(ageStr, "%d", age);
+  sprintf(ageStr, "%ld", age);
   //say(timeStr,ageStr,"","");
   //delay(1000);
 }
@@ -475,12 +484,29 @@ void updateDisplay() {
   display.setCursor(120, 3*LINE_PX);
   display.println(fixStatus);
 
+  display.display();
+
+  lastDisplay = millis();
+}
+
+void updateStatusDisplay(){
+  display.clearDisplay();
+  char buff[20];
+
   float measuredvbat = analogRead(A7);
   measuredvbat *= (2 * 3.3 / 1024);
-  char buff[8];
-  sprintf(buff, "%.2fV", measuredvbat);
+  sprintf(buff, "VBatt: %.2fV", measuredvbat);
+  display.setCursor(0, 0);
+  display.println(buff);
 
-  display.setCursor(90, 0);
+  sprintf(buff, "lat:%11.6f", myLoc.lat / 1e6);
+  display.println(buff);
+
+  sprintf(buff, "lon:%11.6f", myLoc.lon / 1e6);
+  display.println(buff);
+
+  sprintf(buff, "acc:%3.0fm sats:%2d", myLoc.hAcc, numSats);
+  //sprintf(buff, "alt:%dm", altitude / 100);
   display.println(buff);
 
   display.display();
@@ -534,27 +560,36 @@ void setup() {
   strcpy(myLoc.callsign, CALLSIGN);
 
   pinMode(LED_PIN, OUTPUT);
-  pinMode(C_PIN, INPUT_PULLUP);
+  pinMode(B_PIN, INPUT_PULLUP);
+  pinMode(A_PIN, INPUT_PULLUP);
 
   initDisplay();
   initRadio();
 
   Serial1.begin(9600);
 
-  debouncer.attach(C_PIN);
-  debouncer.interval(5); // interval in ms
+  buttonB.attach(B_PIN);
+  buttonB.interval(5);
+
+  buttonC.attach(C_PIN);
+  buttonC.interval(5); // interval in ms
 }
 
 void loop() {
 
-  debouncer.update();
+  buttonB.update();
+  buttonC.update();
 
-  if (debouncer.fell()) {
+  if (buttonC.fell()) {
     // button is pressed -- trigger action
     int count = getNumTrackers();
     if (count > 0) {
       activeLoc = (activeLoc + 1) % count;
     }
+  }
+
+  if (buttonB.fell()) {
+    dispMode = (dispMode + 1) % 2;
   }
 
 
@@ -581,6 +616,9 @@ void loop() {
 
   long sinceLastDisplayUpdate = millis() - lastDisplay;
   if (sinceLastDisplayUpdate < 0 || sinceLastDisplayUpdate > DISPLAY_INTERVAL) {
-    updateDisplay();
+    if (dispMode == 0)
+      updateDisplay();
+    else
+      updateStatusDisplay();
   }
 }
