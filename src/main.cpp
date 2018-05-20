@@ -297,14 +297,6 @@ void transmitData() {
 }
 
 void setFix () {
-  /*
-    TESTING MODE
-    myLat = MAN_LAT - 200*(1e-3*millis());
-    myLon = MAN_LON - 200*(1e-3*millis());
-    amIAccurate = true;
-    lastFix = millis();
-    return;
-  */
 
   int32_t lat, lon;
   unsigned long age;
@@ -318,7 +310,7 @@ void setFix () {
     lat = 0;
     lon = 0;
   }
-//  Serial.println(String(flat, 6) + " " + String(flon, 6));
+
   myLoc.lat = lat;
   myLoc.lon = lon;
 
@@ -330,8 +322,22 @@ void setFix () {
   myLoc.isAccurate = (myLoc.hAcc > 0 && myLoc.hAcc <= ACCURACY_THRESHOLD);
 }
 
+void setFixTime() {
+  int year;
+  byte month, day, hour, minute, second, hundredths;
+  unsigned long age;
+  gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
+  char timeStr[20];
+  char ageStr[20];
+  sprintf(timeStr, "%02d:%02d:%02d.%0d2", hour, minute, second, hundredths);
+  sprintf(ageStr, "%d", age);
+  //say(timeStr,ageStr,"","");
+  //delay(1000);
+}
+
+
 void attemptUpdateFix() {
-  //setFixTime();
+  setFixTime();
   setFix();
 }
 
@@ -481,14 +487,6 @@ void updateDisplay() {
 
   lastDisplay = millis();
 }
-
-//void setFixTime() {
-//  int year;
-//  byte month, day, hour, minute, second, hundredths;
-//  unsigned long age;
-//  gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
-//  timeStr =  String(hour) + ":" + String(minute) + ":" +  String(second) + "/" + String(age) + "ms";
-//}
 
 void initRadio(){
   pinMode(RFM95_RST, OUTPUT);
