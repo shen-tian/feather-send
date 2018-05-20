@@ -464,13 +464,17 @@ void updateDisplay() {
   display.setCursor(0, 0);
   display.println(getCallsigns());
   if (count > 0) {
-    display.println(locationString(&theirLoc, ""));
+    char msg[10];
+    strcpy(msg,"");
+    display.println(locationString(&theirLoc, msg));
     display.println(fixAge(theirLoc.timestamp));
     display.setCursor(60, 2*LINE_PX);
     display.println(String(theirLoc.rssi) + "db");
   }
   display.setCursor(0, 3*LINE_PX);
-  display.println(locationString(&myLoc, "and lost"));
+  char msg[10];
+  strcpy(msg, "and lost");
+  display.println(locationString(&myLoc, msg));
 
   String fixStatus = "";
   long sinceLastFix = millis() - lastFix;
