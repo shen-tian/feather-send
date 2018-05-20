@@ -489,6 +489,9 @@ void updateDisplay() {
   lastDisplay = millis();
 }
 
+const uint8_t satIcon[] PROGMEM = {0x00, 0x26, 0x74, 0x38, 0x14, 0x68, 0x40, 0x00};
+const uint8_t altIcon[] PROGMEM = {0x00, 0x00, 0x18, 0x1c, 0x7e, 0x7e, 0xff, 0x00};
+
 void updateStatusDisplay(){
   display.clearDisplay();
   char buff[20];
@@ -499,18 +502,18 @@ void updateStatusDisplay(){
   display.setCursor(0, 0);
   display.println(buff);
 
-  sprintf(buff, "lat:%11.6f", myLoc.lat / 1e6);
+  sprintf(buff, "lat:%11.6f   %2d", myLoc.lat / 1e6, numSats);
   display.println(buff);
 
   sprintf(buff, "lon:%11.6f", myLoc.lon / 1e6);
   display.println(buff);
 
-  sprintf(buff, "acc:%3.0fm sats:%2d", myLoc.hAcc, numSats);
-  //sprintf(buff, "alt:%dm", altitude / 100);
+  sprintf(buff, "acc:%4.0fm alt:%4dm", myLoc.hAcc, altitude / 100);
   display.println(buff);
 
-  display.display();
+  display.drawBitmap(17 * 6, 1 * LINE_PX, satIcon, 8, 8, 1);
 
+  display.display();
   lastDisplay = millis();
 }
 
