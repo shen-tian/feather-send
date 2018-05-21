@@ -340,19 +340,16 @@ void setFix () {
   altitude = gps.altitude();
 }
 
+char timeStr[20];
+
 void setFixTime() {
   int year;
   byte month, day, hour, minute, second, hundredths;
   unsigned long age;
   gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
-  char timeStr[20];
-  char ageStr[20];
-  sprintf(timeStr, "%02d:%02d:%02d.%0d2", hour, minute, second, hundredths);
-  sprintf(ageStr, "%ld", age);
-  //say(timeStr,ageStr,"","");
-  //delay(1000);
-}
 
+  sprintf(timeStr, "%02d:%02d:%02d %02lds ago", hour, minute, second, age/1000);
+}
 
 void attemptUpdateFix() {
   setFixTime();
@@ -556,7 +553,8 @@ void updateGpsDisplay(){
   sprintf(buff, "VBatt: %.2fV", measuredvbat);
   //sprintf(buff, "Bearing %d, Cal %d", heading, magCal);
   display.setCursor(0, 0);
-  display.println(buff);
+  //display.println(buff);
+  display.println(timeStr);
 
   sprintf(buff, "lat:%11.6f   %2d", myLoc.lat / 1e6, numSats);
   display.println(buff);
