@@ -464,7 +464,7 @@ String locationString(fix* loc, char nofixstr[])
 }
 
 imu::Vector<3> euler, mag, gyro;
-
+int8_t temperature;
 int32_t heading;
 uint8_t sysCal, gyroCal, accCal, magCal;
 
@@ -477,6 +477,7 @@ void updateDirection(){
     euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
     mag = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
     gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+    temperature = bno.getTemp();
 
     heading = euler.x() + MAG_DEC + SENSOR_HEADING;
     if (heading > 360)
@@ -551,7 +552,6 @@ void updateGpsDisplay(){
   float measuredvbat = analogRead(A7);
   measuredvbat *= (2 * 3.3 / 1024);
   sprintf(buff, "VBatt: %.2fV", measuredvbat);
-  //sprintf(buff, "Bearing %d, Cal %d", heading, magCal);
   display.setCursor(0, 0);
   //display.println(buff);
   display.println(timeStr);
@@ -575,7 +575,7 @@ void updateImuDisplay(){
  display.clearDisplay();
   char buff[20];
 
-  sprintf(buff, "Bearing %3ld  S%dG%dA%dM%d", heading, sysCal, gyroCal, accCal, magCal);
+  sprintf(buff, "br %3ld tp %2d S%dG%dA%dM%d", heading, temperature, sysCal, gyroCal, accCal, magCal);
   display.setCursor(0, 0);
   display.println(buff);
 
