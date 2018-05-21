@@ -492,7 +492,7 @@ void updateDirection(){
 void showHeading(fix* loc){
   float bearing = initialBearing(myLoc.lat, loc->lat, myLoc.lon, loc->lon);
 
-  float diff = heading - bearing + 90;
+  float diff = heading - bearing;
   while (diff > 180)
     diff -= 360;
   while (diff < -180)
