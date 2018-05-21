@@ -6,6 +6,10 @@
 #include <Adafruit_GFX.h>
 #include <Bounce2.h>
 
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
+
+
 // Pin layout
 
 // Push buttons on the OLED wing
@@ -31,6 +35,9 @@
 
 // Init display
 Adafruit_SSD1306 display = Adafruit_SSD1306();
+
+// IMU
+Adafruit_BNO055 bno = Adafruit_BNO055();
 
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
@@ -77,6 +84,8 @@ int activeLoc = 0;
 int altitude = -1;
 
 int dispMode = 0;
+
+#define NUM_MODES 2
 
 #define MAGIC_NUMBER_LEN 2
 
@@ -279,7 +288,7 @@ void transmitData() {
   for (int i = 0; i < MAGIC_NUMBER_LEN; i++) {
     radiopacket[i] = MAGIC_NUMBER[i];
   }
-  for (int i = 0; i < CALLSIGN_LEN; i++) {
+  for (uint8_t i = 0; i < CALLSIGN_LEN; i++) {
     radiopacket[MAGIC_NUMBER_LEN + i] = myLoc.callsign[i];
 
     if (numVirtualTrackers > 1 && i == strlen(myLoc.callsign) - 1) {
@@ -449,11 +458,53 @@ String locationString(fix* loc, char nofixstr[])
   char line[20];
 
   float distance = distanceFromLoc(loc->lat, myLoc.lat, loc->lon, myLoc.lon);
+
   float bearing = initialBearing(myLoc.lat, loc->lat, myLoc.lon, loc->lon);
+
   sprintf(line, "%.1fm away, %.0fdeg", distance, bearing);
 
   return line;
 }
+
+imu::Vector<3> euler, mag, gyro;
+
+int32_t heading;
+uint8_t sysCal, gyroCal, accCal, magCal;
+
+
+#define MAG_DEC -25
+#define SENSOR_HEADING 180
+
+void updateDirection(){
+
+    euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+    mag = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
+    gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+
+    heading = euler.x() + MAG_DEC + SENSOR_HEADING;
+    if (heading > 360)
+      heading -= 360;
+
+    bno.getCalibration(&sysCal, &gyroCal, &accCal, &magCal);
+}
+
+
+void showHeading(fix* loc){
+  float bearing = initialBearing(myLoc.lat, loc->lat, myLoc.lon, loc->lon);
+
+  float diff = heading - bearing + 90;
+  while (diff > 180)
+    diff -= 360;
+  while (diff < -180)
+    diff += 180;
+
+  int8_t offset = diff / 360.0 * 127;
+
+
+  display.fillRect(64 - offset, 3*LINE_PX, 1, 8, 1);
+  display.fillRect(63, 3*LINE_PX,3,2,1);
+}
+
 
 void updateDisplay() {
   fix theirLoc = otherLocs[activeLoc];
@@ -470,11 +521,11 @@ void updateDisplay() {
     display.println(fixAge(theirLoc.timestamp));
     display.setCursor(60, 2*LINE_PX);
     display.println(String(theirLoc.rssi) + "db");
+    showHeading(&theirLoc);
   }
   display.setCursor(0, 3*LINE_PX);
-  char msg[10];
-  strcpy(msg, "and lost");
-  display.println(locationString(&myLoc, msg));
+  //char msg[10];
+  //strcpy(msg, "and lost");
 
   String fixStatus = "";
   long sinceLastFix = millis() - lastFix;
@@ -496,13 +547,14 @@ void updateDisplay() {
 const uint8_t satIcon[] PROGMEM = {0x00, 0x26, 0x74, 0x38, 0x14, 0x68, 0x40, 0x00};
 const uint8_t altIcon[] PROGMEM = {0x00, 0x00, 0x18, 0x1c, 0x7e, 0x7e, 0xff, 0x00};
 
-void updateStatusDisplay(){
+void updateGpsDisplay(){
   display.clearDisplay();
   char buff[20];
 
   float measuredvbat = analogRead(A7);
   measuredvbat *= (2 * 3.3 / 1024);
   sprintf(buff, "VBatt: %.2fV", measuredvbat);
+  //sprintf(buff, "Bearing %d, Cal %d", heading, magCal);
   display.setCursor(0, 0);
   display.println(buff);
 
@@ -516,6 +568,27 @@ void updateStatusDisplay(){
   display.println(buff);
 
   display.drawBitmap(17 * 6, 1 * LINE_PX, satIcon, 8, 8, 1);
+
+  display.display();
+  lastDisplay = millis();
+}
+
+void updateImuDisplay(){
+ display.clearDisplay();
+  char buff[20];
+
+  sprintf(buff, "Bearing %3ld  S%dG%dA%dM%d", heading, sysCal, gyroCal, accCal, magCal);
+  display.setCursor(0, 0);
+  display.println(buff);
+
+  sprintf(buff, "eu x%5.0fy%5.0fz%5.0f", euler.x(), euler.y(), euler.z());
+  display.println(buff);
+
+  sprintf(buff, "ma x%5.1fy%5.1fz%5.1f", mag.x(), mag.y(), mag.z());
+  display.println(buff);
+
+  sprintf(buff, "gy x%5.1fy%5.1fz%5.1f", gyro.x(), gyro.y(), gyro.z());
+  display.println(buff);
 
   display.display();
   lastDisplay = millis();
@@ -561,6 +634,19 @@ void initDisplay(){
   display.clearDisplay();
 }
 
+void initImu(){
+  if(!bno.begin())
+  {
+    /* There was a problem detecting the BNO055 ... check your connections */
+    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+    while(1);
+  }
+
+  delay(1000);
+
+  bno.setExtCrystalUse(true);
+}
+
 // Main
 
 void setup() {
@@ -572,6 +658,7 @@ void setup() {
 
   initDisplay();
   initRadio();
+  initImu();
 
   Serial1.begin(9600);
 
@@ -583,6 +670,7 @@ void setup() {
 }
 
 void loop() {
+  updateDirection();
 
   buttonB.update();
   buttonC.update();
@@ -596,7 +684,7 @@ void loop() {
   }
 
   if (buttonB.fell()) {
-    dispMode = (dispMode + 1) % 2;
+    dispMode = (dispMode + 1) % 3;
   }
 
 
@@ -625,7 +713,9 @@ void loop() {
   if (sinceLastDisplayUpdate < 0 || sinceLastDisplayUpdate > DISPLAY_INTERVAL) {
     if (dispMode == 0)
       updateDisplay();
+    else if (dispMode == 1)
+      updateGpsDisplay();
     else
-      updateStatusDisplay();
+      updateImuDisplay();
   }
 }
