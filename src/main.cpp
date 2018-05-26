@@ -549,11 +549,7 @@ void updateGpsDisplay(){
   display.clearDisplay();
   char buff[20];
 
-  float measuredvbat = analogRead(A7);
-  measuredvbat *= (2 * 3.3 / 1024);
-  sprintf(buff, "VBatt: %.2fV", measuredvbat);
   display.setCursor(0, 0);
-  //display.println(buff);
   display.println(timeStr);
 
   sprintf(buff, "lat:%11.6f   %2d", myLoc.lat / 1e6, numSats);
@@ -586,6 +582,23 @@ void updateImuDisplay(){
   display.println(buff);
 
   sprintf(buff, "gy x%5.1fy%5.1fz%5.1f", gyro.x(), gyro.y(), gyro.z());
+  display.println(buff);
+
+  display.display();
+  lastDisplay = millis();
+}
+
+void updateSystemDisplay(){
+  display.clearDisplay();
+  char buff[20];
+
+  float measuredvbat = analogRead(A7);
+  measuredvbat *= (2 * 3.3 / 1024);
+  sprintf(buff, "VBatt: %.2fV", measuredvbat);
+  display.setCursor(0, 0);
+  display.println(buff);
+
+  sprintf(buff, "Uptime: %ldms", millis());
   display.println(buff);
 
   display.display();
@@ -682,7 +695,7 @@ void loop() {
   }
 
   if (buttonB.fell()) {
-    dispMode = (dispMode + 1) % 3;
+    dispMode = (dispMode + 1) % 4;
   }
 
 
@@ -709,11 +722,15 @@ void loop() {
 
   long sinceLastDisplayUpdate = millis() - lastDisplay;
   if (sinceLastDisplayUpdate < 0 || sinceLastDisplayUpdate > DISPLAY_INTERVAL) {
-    if (dispMode == 0)
-      updateDisplay();
-    else if (dispMode == 1)
-      updateGpsDisplay();
-    else
-      updateImuDisplay();
+    switch(dispMode) {
+    case 0: updateDisplay();
+      break;
+    case 1: updateGpsDisplay();
+      break;
+    case 2: updateImuDisplay();
+      break;
+    case 3: updateSystemDisplay();
+      break;
+    }
   }
 }
