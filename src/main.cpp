@@ -62,7 +62,7 @@ bool sending = false;
 
 #define MAX_OTHER_TRACKERS 5
 
-typedef struct {
+typedef struct fix {
   // final null will never be overwritten
   char callsign[CALLSIGN_LEN + 1] = {0x0, 0x0, 0x0, 0x0, 0x0};
   unsigned long timestamp;
@@ -75,6 +75,19 @@ typedef struct {
   bool isAccurate;
   int rssi;
 } fix;
+
+// Don't pack this, for easier marshalling
+#pragma pack(1)
+
+typedef struct Packet {
+  uint8_t magicNumber[2];
+  char callsign[4];
+  int32_t lat;
+  int32_t lon;
+  char isAccurate;
+} Packet;
+
+#pragma pack()
 
 fix myLoc;
 fix otherLocs[MAX_OTHER_TRACKERS];
@@ -247,24 +260,28 @@ void say(String s, String t, String u, String v) {
 
 
 void processRecv() {
+
+  Packet newPacket;
+
+  memcpy(&newPacket, buf, sizeof(newPacket));
+
   for (int i = 0; i < MAGIC_NUMBER_LEN; i++) {
-    if (MAGIC_NUMBER[i] != buf[i]) {
+    if (MAGIC_NUMBER[i] != newPacket.magicNumber[i]) {
       return;
     }
   }
+
   fix theirLoc;
   for (int i = 0; i < CALLSIGN_LEN; i++) {
-    theirLoc.callsign[i] = buf[MAGIC_NUMBER_LEN + i];
+    theirLoc.callsign[i] = newPacket.callsign[i];
   }
 
-  void* p = buf + MAGIC_NUMBER_LEN + CALLSIGN_LEN;
-  theirLoc.lat = *(int32_t*)p;
-  p = (int32_t*)p + 1;
-  theirLoc.lon = *(int32_t*)p;
-  p = (int32_t*)p + 1;
-  theirLoc.isAccurate = *(uint8_t*)p;
   theirLoc.timestamp = millis();
   theirLoc.rssi = rf95.lastRssi();
+
+  theirLoc.lon = newPacket.lon;
+  theirLoc.lat = newPacket.lat;
+  theirLoc.isAccurate = newPacket.isAccurate;
 
   int slot = 0; // will displace first if all slots are full
   for (int i = 0; i < MAX_OTHER_TRACKERS; i++) {
@@ -283,29 +300,21 @@ void transmitData() {
     return;
   }
 
-  uint8_t len = 2 * sizeof(int32_t) + sizeof(uint8_t) + CALLSIGN_LEN + MAGIC_NUMBER_LEN + 1;
-  uint8_t radiopacket[len];
+  Packet newPacket;
+
   for (int i = 0; i < MAGIC_NUMBER_LEN; i++) {
-    radiopacket[i] = MAGIC_NUMBER[i];
+    newPacket.magicNumber[i] = MAGIC_NUMBER[i];
   }
   for (uint8_t i = 0; i < CALLSIGN_LEN; i++) {
-    radiopacket[MAGIC_NUMBER_LEN + i] = myLoc.callsign[i];
-
-    if (numVirtualTrackers > 1 && i == strlen(myLoc.callsign) - 1) {
-      radiopacket[MAGIC_NUMBER_LEN + i] += virtualTrackerNum;
-      virtualTrackerNum = (virtualTrackerNum + 1) % numVirtualTrackers;
-    }
+    newPacket.callsign[i] = myLoc.callsign[i];
   }
-  void* p = radiopacket + MAGIC_NUMBER_LEN + CALLSIGN_LEN;
-  *(int32_t*)p = myLoc.lat;
-  p = (int32_t*)p + 1;
-  *(int32_t*)p = myLoc.lon;
-  p = (int32_t*)p + 1;
-  *(uint8_t*)p = myLoc.isAccurate;
-  radiopacket[len - 1] = '\0';
+
+  newPacket.lat = myLoc.lat;
+  newPacket.lon = myLoc.lon;
+  newPacket.isAccurate = myLoc.isAccurate;
 
   sending = true;
-  rf95.send((uint8_t *)radiopacket, len);
+  rf95.send((uint8_t*)&newPacket, sizeof(newPacket));
   rf95.waitPacketSent();
   sending = false;
   lastSend = millis();
