@@ -598,8 +598,7 @@ void updateSystemDisplay(){
   display.setCursor(0, 0);
   display.println(buff);
 
-  sprintf(buff, "Uptime: %ldms", millis());
-  display.println(buff);
+  display.println("Up time:" + fixAge(0));
 
   display.display();
   lastDisplay = millis();

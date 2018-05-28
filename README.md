@@ -2,20 +2,22 @@
 
 Ported over to PlatformIO from [electrosew](https://github.com/mrgriscom/electrosew/blob/master/feather_send/feather_send.ino). This is the multi-agent version. It's configured for a Feather M0 based board, but should run fine on a 32u4 Feather too.
 
+## Packet format
+
+ - 2 bytes: magic number `0x2c` and `0x0b`;
+ - 4 bytes: call sign: 4 x ASCII
+ - 4 bytes: latitude, signed int, in millionth of a degree
+ - 4 bytes: longitude, signed int, in millionth of a degree
+ = 1 byte: 0x01 if accurate. 0x00 otherwise
+
+ Older protocol added an extra 0x00 to the end. But this is not required, and only first 15 byte
+ are read.
+
 ## Setup
 
 Install `platformio`. Tested using 3.4.1.
 
-## Libs used:
-
-- Adafruit GFX
-- RadioHead
-- SSA1306
-- TinyGPS
-
-Should get installed automatically.
-
-Then, to build, go
+Go
 
     > pio run
 
