@@ -665,7 +665,7 @@ void setup() {
 
   pinMode(LED_PIN, OUTPUT);
   pinMode(B_PIN, INPUT_PULLUP);
-  pinMode(A_PIN, INPUT_PULLUP);
+  pinMode(C_PIN, INPUT_PULLUP);
 
   initDisplay();
   initRadio();
