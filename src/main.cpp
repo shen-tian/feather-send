@@ -9,6 +9,8 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 
+#include "FreeMemory.h"
+
 
 // Pin layout
 
@@ -27,7 +29,7 @@
 #define RFM95_INT 3
 
 // Change to 434.0 or other frequency, must match RX's freq!
-#define RF95_FREQ 915.0
+#define RF95_FREQ 868.1
 
 // Dimension of the display
 #define LINE_PX 8
@@ -40,7 +42,7 @@ Adafruit_SSD1306 display = Adafruit_SSD1306();
 Adafruit_BNO055 bno = Adafruit_BNO055();
 
 // Singleton instance of the radio driver
-RH_RF95 rf95(RFM95_CS, RFM95_INT);
+RH_RF95 rf95 = RH_RF95(RFM95_CS, RFM95_INT);
 
 Bounce buttonB = Bounce();
 Bounce buttonC = Bounce();
@@ -609,8 +611,34 @@ void updateSystemDisplay(){
 
   display.println("Up time:" + fixAge(0));
 
+  sprintf(buff, "Free mem: %dkb", freeMemory());
+  display.println(buff);
+
+  sprintf(buff, "Freq: %.2fMhz", RF95_FREQ);
+  display.println(buff);
+
   display.display();
   lastDisplay = millis();
+}
+
+char spreadFactor(uint8_t spreadFactor)
+{
+  switch(spreadFactor) {
+    case 7: return 0x70;
+    case 8: return 0x80;
+    case 9: return 0x90;
+    case 10: return 0xa0;
+    case 11: return 0xb0;
+    case 12: return 0xc0;
+    default: return 0x70;
+  }
+}
+
+void modemConfig(RH_RF95::ModemConfig* config, uint8_t bandwidth, uint8_t spreadFactor){
+
+  config->reg_1d = 0x70 + 0x02;
+  config->reg_1e = 10 * spreadFactor + 0x04;
+  config->reg_26 = 0x00;
 }
 
 void initRadio(){
@@ -639,6 +667,13 @@ void initRadio(){
     say("x1", "", "", "");
     while (1);
   }
+
+  RH_RF95::ModemConfig config;
+
+  modemConfig(&config, 125, 7);
+
+  rf95.setModemRegisters(&config);
+
   rf95.setTxPower(23, false);
 }
 
