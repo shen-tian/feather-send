@@ -9,6 +9,8 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 
+#include <FastLED.h>
+
 #include "FreeMemory.h"
 
 
@@ -29,7 +31,7 @@
 #define RFM95_INT 3
 
 // Change to 434.0 or other frequency, must match RX's freq!
-#define RF95_FREQ 868.1
+#define RF95_FREQ 915.0
 
 // Dimension of the display
 #define LINE_PX 8
@@ -37,6 +39,11 @@
 
 // Init display
 Adafruit_SSD1306 display = Adafruit_SSD1306();
+
+// LEDs
+
+#define NUM_LEDS 12
+CRGB leds[NUM_LEDS];
 
 // IMU
 Adafruit_BNO055 bno = Adafruit_BNO055();
@@ -599,6 +606,50 @@ void updateImuDisplay(){
   lastDisplay = millis();
 }
 
+uint8_t dispHeading = 0;
+
+#define LED_OFFSET 180
+
+void updateLeds(){
+
+  float target = 0;
+
+  if (dispMode == 0) {
+     fix theirLoc = otherLocs[activeLoc];
+     int count = getNumTrackers();
+
+     if (count > 0) {
+       target = initialBearing(myLoc.lat, theirLoc.lat, myLoc.lon, theirLoc.lon);
+     }
+  }
+
+  uint8_t col = 0;
+  uint8_t sat = 255 * .6;
+  if (magCal == 3)
+    col += 127;
+
+  if (dispMode == 0)
+    col += 64;
+
+  uint8_t byteHeading = (uint8_t)((heading -target + LED_OFFSET) * 0.7111);
+
+  int8_t gap = byteHeading - dispHeading;
+
+  dispHeading += (int8_t)(gap * .3);
+
+  for (int i = 0; i < NUM_LEDS; i++)
+  {
+    uint8_t pos = (NUM_LEDS - i) * 255 / NUM_LEDS;
+    uint8_t distance = abs(dispHeading - pos);
+    if (distance > 127)
+      distance = 255 - distance;
+    uint8_t val = max(255 - distance * 8, 0);
+
+    leds[i] = CHSV(col, sat, val);
+  }
+  FastLED.show();
+}
+
 void updateSystemDisplay(){
   display.clearDisplay();
   char buff[20];
@@ -637,7 +688,7 @@ char spreadFactor(uint8_t spreadFactor)
 void modemConfig(RH_RF95::ModemConfig* config, uint8_t bandwidth, uint8_t spreadFactor){
 
   config->reg_1d = 0x70 + 0x02;
-  config->reg_1e = 10 * spreadFactor + 0x04;
+  config->reg_1e = 0x70 + 0x04;
   config->reg_26 = 0x00;
 }
 
@@ -721,10 +772,21 @@ void setup() {
 
   buttonC.attach(C_PIN);
   buttonC.interval(5); // interval in ms
+
+  FastLED.addLeds<WS2812B, 10, GRB>(leds, NUM_LEDS);
+
+  leds[0] = CRGB::Purple;
+  FastLED.show();
+  delay(500);
+  // Now turn the LED off, then pause
+  leds[0] = CRGB::Black;
+  FastLED.setBrightness(128);
+  FastLED.show();
 }
 
 void loop() {
   updateDirection();
+  updateLeds();
 
   buttonB.update();
   buttonC.update();
