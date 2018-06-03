@@ -12,6 +12,7 @@
 #include <FastLED.h>
 
 #include "FreeMemory.h"
+#include "LedRing.h"
 
 
 // Pin layout
@@ -25,7 +26,6 @@
 #define LED_PIN 13
 
 //LoRA radio for feather m0
-// INT is different for 32u4 feather
 #define RFM95_CS 8
 #define RFM95_RST 4
 #define RFM95_INT 3
@@ -43,7 +43,10 @@ Adafruit_SSD1306 display = Adafruit_SSD1306();
 // LEDs
 
 #define NUM_LEDS 12
-CRGB leds[NUM_LEDS];
+#define LED_OFFSET 270
+#define NEO_PIN 10
+
+LedRing ledRing = LedRing(NUM_LEDS, LED_OFFSET);
 
 // IMU
 Adafruit_BNO055 bno = Adafruit_BNO055();
@@ -488,7 +491,7 @@ uint8_t sysCal, gyroCal, accCal, magCal;
 
 
 #define MAG_DEC -25
-#define SENSOR_HEADING 180
+#define SENSOR_HEADING 90
 
 void updateDirection(){
 
@@ -606,9 +609,7 @@ void updateImuDisplay(){
   lastDisplay = millis();
 }
 
-uint8_t dispHeading = 0;
-
-#define LED_OFFSET 180
+//uint8_t dispHeading = 0;
 
 void updateLeds(){
 
@@ -624,30 +625,13 @@ void updateLeds(){
   }
 
   uint8_t col = 0;
-  uint8_t sat = 255 * .6;
   if (magCal == 3)
     col += 127;
 
   if (dispMode == 0)
     col += 64;
 
-  uint8_t byteHeading = (uint8_t)((heading -target + LED_OFFSET) * 0.7111);
-
-  int8_t gap = byteHeading - dispHeading;
-
-  dispHeading += (int8_t)(gap * .3);
-
-  for (int i = 0; i < NUM_LEDS; i++)
-  {
-    uint8_t pos = (NUM_LEDS - i) * 255 / NUM_LEDS;
-    uint8_t distance = abs(dispHeading - pos);
-    if (distance > 127)
-      distance = 255 - distance;
-    uint8_t val = max(255 - distance * 8, 0);
-
-    leds[i] = CHSV(col, sat, val);
-  }
-  FastLED.show();
+  ledRing.update(heading - target, col);
 }
 
 void updateSystemDisplay(){
@@ -755,6 +739,9 @@ void initImu(){
 // Main
 
 void setup() {
+
+  ledRing.init<NEO_PIN>();
+
   strcpy(myLoc.callsign, CALLSIGN);
 
   pinMode(LED_PIN, OUTPUT);
@@ -772,16 +759,6 @@ void setup() {
 
   buttonC.attach(C_PIN);
   buttonC.interval(5); // interval in ms
-
-  FastLED.addLeds<WS2812B, 10, GRB>(leds, NUM_LEDS);
-
-  leds[0] = CRGB::Purple;
-  FastLED.show();
-  delay(500);
-  // Now turn the LED off, then pause
-  leds[0] = CRGB::Black;
-  FastLED.setBrightness(128);
-  FastLED.show();
 }
 
 void loop() {
