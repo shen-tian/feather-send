@@ -14,8 +14,11 @@ class TrackerGps {
 
  public:
 
-  int32_t lat, lon;
-  unsigned long age;
+  int32_t lat, lon; // millionth of degrees
+  unsigned long fixTimestamp; // ms
+
+  int year;
+  byte month, day, hour, minute, second, hundredths;
 
   int8_t numSats;
 
@@ -33,6 +36,8 @@ class TrackerGps {
   void wake();
 
   bool isAwake();
+
+  bool hasFix();
 
   void tryRead();
 };

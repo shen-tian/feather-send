@@ -65,7 +65,7 @@ TrackerGps gps = TrackerGps();
 #define MAX_FIX_AGE 5000        // Ignore data from GPS if older
 
 // State var for radio/fix
-unsigned long lastSend, lastDisplay, lastFix;
+unsigned long lastSend, lastDisplay;
 bool sending = false;
 
 #define CALLSIGN_LEN 4
@@ -299,7 +299,7 @@ void processRecv() {
 }
 
 void transmitData() {
-  long sinceLastFix = millis() - lastFix;
+  long sinceLastFix = millis() - gps.fixTimestamp;
   if (sinceLastFix > MAX_FIX_AGE) {
     // GPS data is stale
     return;
@@ -323,21 +323,6 @@ void transmitData() {
   rf95.waitPacketSent();
   sending = false;
   lastSend = millis();
-}
-
-char timeStr[20];
-
-void setFixTime() {
-  int year;
-  byte month, day, hour, minute, second, hundredths;
-  unsigned long age;
-  //gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
-
-  sprintf(timeStr, "%02d:%02d:%02d %02lds ago", hour, minute, second, gps.age/1000);
-}
-
-void attemptUpdateFix() {
-  setFixTime();
 }
 
 String fixAge(unsigned long timestamp) {
@@ -486,7 +471,7 @@ void updateDisplay() {
   //strcpy(msg, "and lost");
 
   String fixStatus = "";
-  long sinceLastFix = millis() - lastFix;
+  long sinceLastFix = millis() - gps.fixTimestamp;
   long sinceLastSend = millis() - lastSend;
   if (sinceLastFix > MAX_FIX_AGE) {
     // GPS data is stale
@@ -510,7 +495,11 @@ void updateGpsDisplay(){
   char buff[20];
 
   display.setCursor(0, 0);
-  display.println(timeStr);
+  sprintf(buff, "%02d:%02d:%02d %02lds ago", gps.hour, gps.minute, gps.second, (millis() - gps.fixTimestamp)/1000);
+  display.println(buff);
+  if (gps.isAwake())
+    display.fillCircle(123, 3, 2, 1);
+
 
   sprintf(buff, "lat:%11.6f   %2d", gps.lat / 1e6, gps.numSats);
   display.println(buff);
@@ -690,16 +679,20 @@ void loop() {
   thisImu.update();
   updateLeds();
 
-  if ((millis() > 20000) && (millis() % 10000 < 2000)) {
+  long t = millis();
+
+  long maxGpsAge = thisImu.isStill() ? 30000 : 500;
+  long timeSinceFix = t - gps.fixTimestamp;
+
+  if (gps.hasFix() &&
+      timeSinceFix < maxGpsAge) {
     gps.standby();
   }
 
-  if (millis() % 10000 > 5000) {
+  if (timeSinceFix > maxGpsAge)
     gps.wake();
-  }
 
   gps.tryRead();
-  lastFix = millis() - gps.age;
 
   if (!thisImu.isStill())
     ledRing.poke();
@@ -731,6 +724,7 @@ void loop() {
   long sinceLastTransmit = millis() - lastSend;
   if (sinceLastTransmit < 0 || sinceLastTransmit > TRANSMIT_INTERVAL) {
     transmitData();
+    //rf95.sleep();
   }
 
   long sinceLastDisplayUpdate = millis() - lastDisplay;

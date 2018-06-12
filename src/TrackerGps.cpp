@@ -23,6 +23,10 @@ bool TrackerGps::isAwake() {
   return !_standby;
 }
 
+bool TrackerGps::hasFix() {
+  return numSats > 0;
+}
+
 void TrackerGps::tryRead() {
   if (!_standby && Serial1.available()) {
     char c = Serial1.read();
@@ -34,7 +38,7 @@ void TrackerGps::tryRead() {
       if (newAge != TinyGPS::GPS_INVALID_AGE &&
           newLat != TinyGPS::GPS_INVALID_ANGLE &&
           newLon != TinyGPS::GPS_INVALID_ANGLE) {
-        age = newAge;
+        fixTimestamp = millis() - newAge;
         lat = newLat;
         lon = newLon;
       }
@@ -51,6 +55,8 @@ void TrackerGps::tryRead() {
       }
 
       isAccurate = (hAccuracy > 0 && hAccuracy <= ACCURACY_THRESHOLD);
+
+      _parser.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &newAge);
     }
   }
 }
