@@ -6,14 +6,9 @@
 #include <Adafruit_GFX.h>
 #include <Bounce2.h>
 
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BNO055.h>
-
-#include <FastLED.h>
-
 #include "FreeMemory.h"
 #include "LedRing.h"
-
+#include "Imu.h"
 
 // Pin layout
 
@@ -41,15 +36,18 @@
 Adafruit_SSD1306 display = Adafruit_SSD1306();
 
 // LEDs
-
 #define NUM_LEDS 12
-#define LED_OFFSET 270
+#define LED_OFFSET 285
 #define NEO_PIN 10
 
 LedRing ledRing = LedRing(NUM_LEDS, LED_OFFSET);
 
 // IMU
-Adafruit_BNO055 bno = Adafruit_BNO055();
+
+#define MAG_DEC -25
+#define SENSOR_HEADING 90
+
+Imu thisImu = Imu(MAG_DEC, SENSOR_HEADING);
 
 // Singleton instance of the radio driver
 RH_RF95 rf95 = RH_RF95(RFM95_CS, RFM95_INT);
@@ -484,34 +482,10 @@ String locationString(fix* loc, char nofixstr[])
   return line;
 }
 
-imu::Vector<3> euler, mag, gyro;
-int8_t temperature;
-int32_t heading;
-uint8_t sysCal, gyroCal, accCal, magCal;
-
-
-#define MAG_DEC -25
-#define SENSOR_HEADING 90
-
-void updateDirection(){
-
-    euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
-    mag = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
-    gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-    temperature = bno.getTemp();
-
-    heading = euler.x() + MAG_DEC + SENSOR_HEADING;
-    if (heading > 360)
-      heading -= 360;
-
-    bno.getCalibration(&sysCal, &gyroCal, &accCal, &magCal);
-}
-
-
 void showHeading(fix* loc){
   float bearing = initialBearing(myLoc.lat, loc->lat, myLoc.lon, loc->lon);
 
-  float diff = heading - bearing;
+  float diff = thisImu.heading - bearing;
   while (diff > 180)
     diff -= 360;
   while (diff < -180)
@@ -592,24 +566,22 @@ void updateImuDisplay(){
  display.clearDisplay();
   char buff[20];
 
-  sprintf(buff, "br %3ld tp %2d S%dG%dA%dM%d", heading, temperature, sysCal, gyroCal, accCal, magCal);
+  sprintf(buff, "br %3ld tp %2d S%dG%dA%dM%d", thisImu.heading, thisImu.temperature, thisImu.sysCal, thisImu.gyroCal, thisImu.accCal, thisImu.magCal);
   display.setCursor(0, 0);
   display.println(buff);
 
-  sprintf(buff, "eu x%5.0fy%5.0fz%5.0f", euler.x(), euler.y(), euler.z());
+  sprintf(buff, "eu x%5.0fy%5.0fz%5.0f", thisImu.euler.x(), thisImu.euler.y(), thisImu.euler.z());
   display.println(buff);
 
-  sprintf(buff, "ma x%5.1fy%5.1fz%5.1f", mag.x(), mag.y(), mag.z());
+  sprintf(buff, "ma x%5.1fy%5.1fz%5.1f", thisImu.mag.x(), thisImu.mag.y(), thisImu.mag.z());
   display.println(buff);
 
-  sprintf(buff, "gy x%5.1fy%5.1fz%5.1f", gyro.x(), gyro.y(), gyro.z());
+  sprintf(buff, "gy x%5.1fy%5.1fz%5.1f", thisImu.gyro.x(), thisImu.gyro.y(), thisImu.gyro.z());
   display.println(buff);
 
   display.display();
   lastDisplay = millis();
 }
-
-//uint8_t dispHeading = 0;
 
 void updateLeds(){
 
@@ -624,14 +596,12 @@ void updateLeds(){
      }
   }
 
-  uint8_t col = 0;
-  if (magCal == 3)
-    col += 127;
+  uint8_t col = (thisImu.magCal > 1) ? 127 : 0;
 
   if (dispMode == 0)
     col += 64;
 
-  ledRing.update(heading - target, col);
+  ledRing.update(thisImu.heading - target, col);
 }
 
 void updateSystemDisplay(){
@@ -723,19 +693,6 @@ void initDisplay(){
   display.clearDisplay();
 }
 
-void initImu(){
-  if(!bno.begin())
-  {
-    /* There was a problem detecting the BNO055 ... check your connections */
-    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    while(1);
-  }
-
-  delay(1000);
-
-  bno.setExtCrystalUse(true);
-}
-
 // Main
 
 void setup() {
@@ -750,7 +707,7 @@ void setup() {
 
   initDisplay();
   initRadio();
-  initImu();
+  thisImu.init();
 
   Serial1.begin(9600);
 
@@ -759,11 +716,16 @@ void setup() {
 
   buttonC.attach(C_PIN);
   buttonC.interval(5); // interval in ms
+
+  ledRing.poke();
 }
 
 void loop() {
-  updateDirection();
+  thisImu.update();
   updateLeds();
+
+  if (!thisImu.isStill())
+    ledRing.poke();
 
   buttonB.update();
   buttonC.update();

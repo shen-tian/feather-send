@@ -2,9 +2,10 @@
 
 LedRing::LedRing (const uint8_t numLeds, const float offset) {
   _dispHeading = 0;
-  _offset = 0;
+  _offset = offset;
   _numLeds = numLeds;
   _leds = new CRGB[numLeds];
+  _lastTouch = millis();
 }
 
 void LedRing::initRing(){
@@ -32,6 +33,11 @@ void LedRing::update(float targetBearing, uint8_t color){
 
     _leds[i] = CHSV(color, sat, val);
   }
+
+  if (millis() - _lastTouch > 10000)
+    _brightness = max(0, _brightness - 1);
+
+  FastLED.setBrightness(_brightness);
   FastLED.show();
 }
 
@@ -40,4 +46,9 @@ void LedRing::goRed(){
     _leds[i] = CRGB::Red;
 
   FastLED.show();
+}
+
+void LedRing::poke(){
+  _lastTouch = millis();
+  _brightness = 255;
 }

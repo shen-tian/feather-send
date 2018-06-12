@@ -10,6 +10,9 @@ class LedRing {
   uint8_t _numLeds;
   float _offset;
 
+  uint8_t _brightness;
+  long _lastTouch;
+
   void initRing();
 
   public:
@@ -22,6 +25,9 @@ class LedRing {
   }
 
   void update(float targetBearing, uint8_t color);
+
+  void poke();
+
   void goRed();
 };
 
