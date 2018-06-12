@@ -62,7 +62,7 @@ TrackerGps gps = TrackerGps();
 // Timing:
 #define TRANSMIT_INTERVAL 10000 // interval between sending updates
 #define DISPLAY_INTERVAL 150    // interval between updating display
-#define MAX_FIX_AGE 5000        // Ignore data from GPS if older
+#define MAX_FIX_AGE 30000        // Ignore data from GPS if older
 
 // State var for radio/fix
 unsigned long lastSend, lastDisplay;
@@ -319,8 +319,12 @@ void transmitData() {
   newPacket.isAccurate = gps.isAccurate;
 
   sending = true;
+  digitalWrite(LED_PIN, HIGH);
+   
   rf95.send((uint8_t*)&newPacket, sizeof(newPacket));
   rf95.waitPacketSent();
+  digitalWrite(LED_PIN, LOW);
+   
   sending = false;
   lastSend = millis();
 }
@@ -716,8 +720,8 @@ void loop() {
     uint8_t len = sizeof(buf);
     if (rf95.recv(buf, &len)) {
       digitalWrite(LED_PIN, HIGH);
-      digitalWrite(LED_PIN, LOW);
       processRecv();
+      digitalWrite(LED_PIN, LOW);
     }
   }
 
