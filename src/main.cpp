@@ -121,10 +121,6 @@ int virtualTrackerNum = 0;
 
 // Start the geometry geography stuff
 
-// 95% error radius at HDOP=1
-#define GPS_BASE_ACCURACY 6.2  // m
-
-#define ACCURACY_THRESHOLD 30  // m
 
 #define OTHER_LOC_STALENESS 120000
 
