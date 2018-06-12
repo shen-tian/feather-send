@@ -1,6 +1,6 @@
 #include <RH_RF95.h>
 #include <Adafruit_SSD1306.h>
-#include <TinyGPS.h>
+
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_GFX.h>
@@ -9,6 +9,7 @@
 #include "FreeMemory.h"
 #include "LedRing.h"
 #include "Imu.h"
+#include "TrackerGps.h"
 
 // Pin layout
 
@@ -56,7 +57,7 @@ Bounce buttonB = Bounce();
 Bounce buttonC = Bounce();
 
 // GPS
-TinyGPS gps;
+TrackerGps gps = TrackerGps();
 
 // Timing:
 #define TRANSMIT_INTERVAL 10000 // interval between sending updates
@@ -102,9 +103,7 @@ typedef struct Packet {
 fix myLoc;
 fix otherLocs[MAX_OTHER_TRACKERS];
 
-int numSats = -1;
 int activeLoc = 0;
-int altitude = -1;
 
 int dispMode = 0;
 
@@ -319,9 +318,9 @@ void transmitData() {
     newPacket.callsign[i] = myLoc.callsign[i];
   }
 
-  newPacket.lat = myLoc.lat;
-  newPacket.lon = myLoc.lon;
-  newPacket.isAccurate = myLoc.isAccurate;
+  newPacket.lat = gps.lat;
+  newPacket.lon = gps.lon;
+  newPacket.isAccurate = gps.isAccurate;
 
   sending = true;
   rf95.send((uint8_t*)&newPacket, sizeof(newPacket));
@@ -330,49 +329,19 @@ void transmitData() {
   lastSend = millis();
 }
 
-void setFix () {
-
-  int32_t lat, lon;
-  unsigned long age;
-  gps.get_position(&lat, &lon, &age);
-  if (age == TinyGPS::GPS_INVALID_AGE) {
-    return;
-  }
-  lastFix = millis() - age;
-
-  if (lat == TinyGPS::GPS_INVALID_ANGLE || lon == TinyGPS::GPS_INVALID_ANGLE) {
-    lat = 0;
-    lon = 0;
-  }
-
-  myLoc.lat = lat;
-  myLoc.lon = lon;
-
-  if (gps.hdop() == TinyGPS::GPS_INVALID_HDOP) {
-    myLoc.hAcc = -1;
-  } else {
-    myLoc.hAcc = 1e-2 * gps.hdop() * GPS_BASE_ACCURACY;
-  }
-  myLoc.isAccurate = (myLoc.hAcc > 0 && myLoc.hAcc <= ACCURACY_THRESHOLD);
-
-  numSats = gps.satellites();
-  altitude = gps.altitude();
-}
-
 char timeStr[20];
 
 void setFixTime() {
   int year;
   byte month, day, hour, minute, second, hundredths;
   unsigned long age;
-  gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
+  //gps.crack_datetime(&year, &month, &day, &hour, &minute, &second, &hundredths, &age);
 
-  sprintf(timeStr, "%02d:%02d:%02d %02lds ago", hour, minute, second, age/1000);
+  sprintf(timeStr, "%02d:%02d:%02d %02lds ago", hour, minute, second, gps.age/1000);
 }
 
 void attemptUpdateFix() {
   setFixTime();
-  setFix();
 }
 
 String fixAge(unsigned long timestamp) {
@@ -473,9 +442,9 @@ String locationString(fix* loc, char nofixstr[])
 {
   char line[20];
 
-  float distance = distanceFromLoc(loc->lat, myLoc.lat, loc->lon, myLoc.lon);
+  float distance = distanceFromLoc(loc->lat, gps.lat, loc->lon, gps.lon);
 
-  float bearing = initialBearing(myLoc.lat, loc->lat, myLoc.lon, loc->lon);
+  float bearing = initialBearing(gps.lat, loc->lat, gps.lon, loc->lon);
 
   sprintf(line, "%.1fm away, %.0fdeg", distance, bearing);
 
@@ -483,7 +452,7 @@ String locationString(fix* loc, char nofixstr[])
 }
 
 void showHeading(fix* loc){
-  float bearing = initialBearing(myLoc.lat, loc->lat, myLoc.lon, loc->lon);
+  float bearing = initialBearing(gps.lat, loc->lat, gps.lon, loc->lon);
 
   float diff = thisImu.heading - bearing;
   while (diff > 180)
@@ -547,13 +516,13 @@ void updateGpsDisplay(){
   display.setCursor(0, 0);
   display.println(timeStr);
 
-  sprintf(buff, "lat:%11.6f   %2d", myLoc.lat / 1e6, numSats);
+  sprintf(buff, "lat:%11.6f   %2d", gps.lat / 1e6, gps.numSats);
   display.println(buff);
 
-  sprintf(buff, "lon:%11.6f", myLoc.lon / 1e6);
+  sprintf(buff, "lon:%11.6f", gps.lon / 1e6);
   display.println(buff);
 
-  sprintf(buff, "acc:%4.0fm alt:%4dm", myLoc.hAcc, altitude / 100);
+  sprintf(buff, "acc:%4.0fm alt:%4dm", gps.hAccuracy, gps.altitude / 100);
   display.println(buff);
 
   display.drawBitmap(17 * 6, 1 * LINE_PX, satIcon, 8, 8, 1);
@@ -592,7 +561,7 @@ void updateLeds(){
      int count = getNumTrackers();
 
      if (count > 0) {
-       target = initialBearing(myLoc.lat, theirLoc.lat, myLoc.lon, theirLoc.lon);
+       target = initialBearing(gps.lat, theirLoc.lat, gps.lon, theirLoc.lon);
      }
   }
 
@@ -709,7 +678,8 @@ void setup() {
   initRadio();
   thisImu.init();
 
-  Serial1.begin(9600);
+  // GPS
+  gps.init();
 
   buttonB.attach(B_PIN);
   buttonB.interval(5);
@@ -723,6 +693,17 @@ void setup() {
 void loop() {
   thisImu.update();
   updateLeds();
+
+  if ((millis() > 20000) && (millis() % 10000 < 2000)) {
+    gps.standby();
+  }
+
+  if (millis() % 10000 > 5000) {
+    gps.wake();
+  }
+
+  gps.tryRead();
+  lastFix = millis() - gps.age;
 
   if (!thisImu.isStill())
     ledRing.poke();
@@ -740,14 +721,6 @@ void loop() {
 
   if (buttonB.fell()) {
     dispMode = (dispMode + 1) % 4;
-  }
-
-
-  if (Serial1.available()) {
-    char c = Serial1.read();
-    if (gps.encode(c)) { // Did a new valid sentence come in?
-      attemptUpdateFix();
-    }
   }
 
   if (rf95.available()) {
