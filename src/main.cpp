@@ -499,7 +499,29 @@ void updateGpsDisplay(){
   char buff[20];
 
   display.setCursor(0, 0);
-  sprintf(buff, "%02d:%02d:%02d %02lds ago", gps.hour, gps.minute, gps.second, (millis() - gps.fixTimestamp)/1000);
+  //sprintf(buff, "%02d:%02d:%02d %02lds ago", gps.hour, gps.minute, gps.second, (millis() - gps.fixTimestamp)/1000);
+  
+  int age = (millis() - gps.fixTimestamp) / 1000;
+  byte second = gps.second + age;
+  byte hour = gps.hour;
+  byte minute = gps.minute;
+
+  while (second >= 60) {
+    second -= 60;
+    minute++;
+  }
+
+  while (minute >= 60) {
+    minute -= 60;
+    hour++;
+  }
+
+  while (hour >= 24) {
+    hour--;
+  }
+
+  sprintf(buff, "%02d:%02d:%02d %d", hour, minute, second, age);
+  
   display.println(buff);
   if (gps.isAwake())
     display.fillCircle(123, 3, 2, 1);

@@ -14,7 +14,10 @@ void TrackerGps::standby() {
 
 void TrackerGps::wake() {
   if (_standby){
-    Serial1.println("");
+    for (int i = 0; i < 3; i++) {
+      Serial1.println("");
+      delay(100);
+    }
     _standby = false;
   }
 }
