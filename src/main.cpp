@@ -12,14 +12,11 @@
 #define Serial SerialUSB
 #endif
 
-#include "FreeMemory.h"
+#include "State.h"
 #include "LedRing.h"
 #include "Imu.h"
 #include "TrackerGps.h"
-
-
-
-// Pin layout
+#include "display.h"
 
 // Push buttons on the OLED wing
 #define A_PIN 9
@@ -67,48 +64,10 @@ TrackerGps gps = TrackerGps();
 #define DISPLAY_INTERVAL 150    // interval between updating display
 #define MAX_FIX_AGE 30000        // Ignore data from GPS if older
 
-// State var for radio/fix
-unsigned long lastSend, lastDisplay;
-bool sending = false;
-
 #define CALLSIGN_LEN 4
 #define CALLSIGN "DIGS"
 
-#define MAX_OTHER_TRACKERS 5
-
-typedef struct fix {
-  // final null will never be overwritten
-  char callsign[CALLSIGN_LEN + 1] = {0x0, 0x0, 0x0, 0x0, 0x0};
-  unsigned long timestamp;
-  // lat/lon are stored as signed 32-bit ints as millionths
-  // of a degree (-123.45678 => -123,456,780)
-  int32_t lat;
-  int32_t lon;
-  float elev;  // unused
-  float hAcc;
-  bool isAccurate;
-  int rssi;
-} fix;
-
-// Don't pack this, for easier marshalling
-#pragma pack(1)
-
-typedef struct Packet {
-  uint8_t magicNumber[2];
-  char callsign[4];
-  int32_t lat;
-  int32_t lon;
-  char isAccurate;
-} Packet;
-
-#pragma pack()
-
-fix myLoc;
-fix otherLocs[MAX_OTHER_TRACKERS];
-
-int activeLoc = 0;
-
-int dispMode = 0;
+State state = State();
 
 #define MAGIC_NUMBER_LEN 2
 
@@ -286,12 +245,12 @@ void processRecv() {
 
   int slot = 0; // will displace first if all slots are full
   for (int i = 0; i < MAX_OTHER_TRACKERS; i++) {
-    if (strlen(otherLocs[i].callsign) == 0 || strcmp(theirLoc.callsign, otherLocs[i].callsign) == 0) {
+    if (strlen(state.otherLocs[i].callsign) == 0 || strcmp(theirLoc.callsign, state.otherLocs[i].callsign) == 0) {
       slot = i;
       break;
     }
   }
-  otherLocs[slot] = theirLoc;
+  state.otherLocs[slot] = theirLoc;
 }
 
 void transmitData() {
@@ -307,22 +266,22 @@ void transmitData() {
     newPacket.magicNumber[i] = MAGIC_NUMBER[i];
   }
   for (uint8_t i = 0; i < CALLSIGN_LEN; i++) {
-    newPacket.callsign[i] = myLoc.callsign[i];
+    newPacket.callsign[i] = state.myLoc.callsign[i];
   }
 
   newPacket.lat = gps.lat;
   newPacket.lon = gps.lon;
   newPacket.isAccurate = gps.isAccurate;
 
-  sending = true;
+  state.sending = true;
   digitalWrite(LED_PIN, HIGH);
    
   rf95.send((uint8_t*)&newPacket, sizeof(newPacket));
   rf95.waitPacketSent();
   digitalWrite(LED_PIN, LOW);
    
-  sending = false;
-  lastSend = millis();
+  state.sending = false;
+  state.lastSend = millis();
 }
 
 String fixAge(unsigned long timestamp) {
@@ -347,7 +306,7 @@ String fixAge(unsigned long timestamp) {
 int getNumTrackers() {
   int i;
   for (i = 0; i < MAX_OTHER_TRACKERS; i++) {
-    if (strlen(otherLocs[i].callsign) == 0) {
+    if (strlen(state.otherLocs[i].callsign) == 0) {
       break;
     }
   }
@@ -361,12 +320,12 @@ String getCallsigns() {
   }
   String s = "";
   for (int i = 0; i < count; i++) {
-    int slot = (activeLoc + i) % count;
+    int slot = (state.activeLoc + i) % count;
     if (i == 0) {
       s.concat(">");
     }
-    String cs = String(otherLocs[slot].callsign);
-    if (millis() - otherLocs[slot].timestamp > OTHER_LOC_STALENESS) {
+    String cs = String(state.otherLocs[slot].callsign);
+    if (millis() - state.otherLocs[slot].timestamp > OTHER_LOC_STALENESS) {
       cs.toLowerCase();
     } else {
       cs.toUpperCase();
@@ -386,8 +345,7 @@ String getCallsigns() {
 // Distance/bearing Math from here:
 // https://www.movable-type.co.uk/scripts/latlong.html
 
-float distanceFromLoc(int lat0, int lat1, int lon0, int lon1)
-{
+float distanceFromLoc(int lat0, int lat1, int lon0, int lon1) {
   int R = 6371e3; // metres
   float t0 = PI * lat0 / (180.0 * 1e6);
   float t1 = PI * lat1 / (180.0 * 1e6);
@@ -402,8 +360,7 @@ float distanceFromLoc(int lat0, int lat1, int lon0, int lon1)
   return R * c;
 }
 
-float initialBearing(int lat0, int lat1, int lon0, int lon1)
-{
+float initialBearing(int lat0, int lat1, int lon0, int lon1) {
   float t0 = PI * lat0 / (180.0 * 1e6);
   float t1 = PI * lat1 / (180.0 * 1e6);
   float l0 = PI * lon0 / (180.0 * 1e6);
@@ -419,8 +376,7 @@ float initialBearing(int lat0, int lat1, int lon0, int lon1)
     return atan2(y, x) * 180 / PI;
 }
 
-String locationString(fix* loc, char nofixstr[])
-{
+String locationString(fix* loc, char nofixstr[]) {
   char line[20];
 
   float distance = distanceFromLoc(loc->lat, gps.lat, loc->lon, gps.lon);
@@ -452,9 +408,8 @@ void showHeading(fix* loc){
   display.fillRect(63, 3*LINE_PX,3,2,1);
 }
 
-
 void updateDisplay() {
-  fix theirLoc = otherLocs[activeLoc];
+  fix theirLoc = state.otherLocs[state.activeLoc];
   int count = getNumTrackers();
 
   display.clearDisplay();
@@ -476,11 +431,11 @@ void updateDisplay() {
 
   String fixStatus = "";
   long sinceLastFix = millis() - gps.fixTimestamp;
-  long sinceLastSend = millis() - lastSend;
+  long sinceLastSend = millis() - state.lastSend;
   if (sinceLastFix > MAX_FIX_AGE) {
     // GPS data is stale
     fixStatus = "!";
-  } else if (sending || (sinceLastSend >= 0 && sinceLastSend < 400)) {
+  } else if (state.sending || (sinceLastSend >= 0 && sinceLastSend < 400)) {
     fixStatus = ".";
   }
   display.setCursor(120, 3*LINE_PX);
@@ -488,87 +443,17 @@ void updateDisplay() {
 
   display.display();
 
-  lastDisplay = millis();
+  state.lastDisplay = millis();
 }
 
-const uint8_t satIcon[] PROGMEM = {0x00, 0x26, 0x74, 0x38, 0x14, 0x68, 0x40, 0x00};
 const uint8_t altIcon[] PROGMEM = {0x00, 0x00, 0x18, 0x1c, 0x7e, 0x7e, 0xff, 0x00};
-
-void updateGpsDisplay(){
-  display.clearDisplay();
-  char buff[20];
-
-  display.setCursor(0, 0);
-  //sprintf(buff, "%02d:%02d:%02d %02lds ago", gps.hour, gps.minute, gps.second, (millis() - gps.fixTimestamp)/1000);
-  
-  int age = (millis() - gps.fixTimestamp) / 1000;
-  byte second = gps.second + age;
-  byte hour = gps.hour;
-  byte minute = gps.minute;
-
-  while (second >= 60) {
-    second -= 60;
-    minute++;
-  }
-
-  while (minute >= 60) {
-    minute -= 60;
-    hour++;
-  }
-
-  while (hour >= 24) {
-    hour--;
-  }
-
-  sprintf(buff, "%02d:%02d:%02d %d", hour, minute, second, age);
-  
-  display.println(buff);
-  if (gps.isAwake())
-    display.fillCircle(123, 3, 2, 1);
-
-
-  sprintf(buff, "lat:%11.6f   %2d", gps.lat / 1e6, gps.numSats);
-  display.println(buff);
-
-  sprintf(buff, "lon:%11.6f", gps.lon / 1e6);
-  display.println(buff);
-
-  sprintf(buff, "acc:%4.0fm alt:%4dm", gps.hAccuracy, gps.altitude / 100);
-  display.println(buff);
-
-  display.drawBitmap(17 * 6, 1 * LINE_PX, satIcon, 8, 8, 1);
-
-  display.display();
-  lastDisplay = millis();
-}
-
-void updateImuDisplay(){
- display.clearDisplay();
-  char buff[20];
-
-  sprintf(buff, "br %3ld tp %2d S%dG%dA%dM%d", thisImu.heading, thisImu.temperature, thisImu.sysCal, thisImu.gyroCal, thisImu.accCal, thisImu.magCal);
-  display.setCursor(0, 0);
-  display.println(buff);
-
-  sprintf(buff, "eu x%5.0fy%5.0fz%5.0f", thisImu.euler.x(), thisImu.euler.y(), thisImu.euler.z());
-  display.println(buff);
-
-  sprintf(buff, "ma x%5.1fy%5.1fz%5.1f", thisImu.mag.x(), thisImu.mag.y(), thisImu.mag.z());
-  display.println(buff);
-
-  sprintf(buff, "gy x%5.1fy%5.1fz%5.1f", thisImu.gyro.x(), thisImu.gyro.y(), thisImu.gyro.z());
-  display.println(buff);
-
-  display.display();
-  lastDisplay = millis();
-}
 
 void updateLeds(){
 
   float target = 0;
 
-  if (dispMode == 0) {
-     fix theirLoc = otherLocs[activeLoc];
+  if (state.dispMode == 0) {
+     fix theirLoc = state.otherLocs[state.activeLoc];
      int count = getNumTrackers();
 
      if (count > 0) {
@@ -578,42 +463,13 @@ void updateLeds(){
 
   uint8_t col = (thisImu.magCal > 1) ? 127 : 0;
 
-  if (dispMode == 0)
+  if (state.dispMode == 0)
     col += 64;
 
   ledRing.update(thisImu.heading - target, col);
 }
 
-void updateSystemDisplay(){
-  display.clearDisplay();
-  char buff[20];
-
-  float measuredvbat = 0;
-  
-  for (int i = 0; i < 8; i++)
-    measuredvbat += analogRead(VBAT_PIN);
-
-  measuredvbat /= 8;
-
-  measuredvbat *= VBAT_RATIO;
-  sprintf(buff, "VBatt: %.2fV", measuredvbat);
-  display.setCursor(0, 0);
-  display.println(buff);
-
-  display.println("Up time:" + fixAge(0));
-
-  sprintf(buff, "Free mem: %dkb", freeMemory());
-  display.println(buff);
-
-  sprintf(buff, "Freq: %.2fMhz", RF95_FREQ);
-  display.println(buff);
-
-  display.display();
-  lastDisplay = millis();
-}
-
-char spreadFactor(uint8_t spreadFactor)
-{
+char spreadFactor(uint8_t spreadFactor){
   switch(spreadFactor) {
     case 7: return 0x70;
     case 8: return 0x80;
@@ -683,7 +539,7 @@ void initDisplay(){
   display.setTextSize(1);
   display.setTextColor(WHITE);
 
-  say("hello " + String(myLoc.callsign) + ".", "", "", "");
+  say("hello " + String(state.myLoc.callsign) + ".", "", "", "");
   delay(3000);
   display.clearDisplay();
 }
@@ -691,6 +547,9 @@ void initDisplay(){
 // Main
 
 void setup() {
+
+  state.loraFreq = RF95_FREQ;
+
   Serial.begin(9600);
 
   while (!Serial && (millis() < 3000)) {
@@ -699,7 +558,7 @@ void setup() {
 
   ledRing.init<NEO_PIN>();
 
-  strcpy(myLoc.callsign, CALLSIGN);
+  strcpy(state.myLoc.callsign, CALLSIGN);
 
   pinMode(LED_PIN, OUTPUT);
   pinMode(B_PIN, INPUT_PULLUP);
@@ -756,12 +615,12 @@ void loop() {
     // button is pressed -- trigger action
     int count = getNumTrackers();
     if (count > 0) {
-      activeLoc = (activeLoc + 1) % count;
+      state.activeLoc = (state.activeLoc + 1) % count;
     }
   }
 
   if (buttonB.fell()) {
-    dispMode = (dispMode + 1) % 4;
+    state.dispMode = (state.dispMode + 1) % 4;
   }
 
   if (rf95.available()) {
@@ -775,22 +634,22 @@ void loop() {
     }
   }
 
-  long sinceLastTransmit = millis() - lastSend;
+  long sinceLastTransmit = millis() - state.lastSend;
   if (sinceLastTransmit < 0 || sinceLastTransmit > TRANSMIT_INTERVAL) {
     transmitData();
     //rf95.sleep();
   }
 
-  long sinceLastDisplayUpdate = millis() - lastDisplay;
+  long sinceLastDisplayUpdate = millis() - state.lastDisplay;
   if (sinceLastDisplayUpdate < 0 || sinceLastDisplayUpdate > DISPLAY_INTERVAL) {
-    switch(dispMode) {
+    switch(state.dispMode) {
     case 0: updateDisplay();
       break;
-    case 1: updateGpsDisplay();
+    case 1: updateGpsDisplay(state, display, gps);
       break;
-    case 2: updateImuDisplay();
+    case 2: updateImuDisplay(state, display, thisImu);
       break;
-    case 3: updateSystemDisplay();
+    case 3: updateSystemDisplay(state, display);
       break;
     }
   }
