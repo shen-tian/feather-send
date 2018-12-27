@@ -39,7 +39,7 @@ class State {
 
   public:
 
-  fix myLoc;
+  char callsign[4];
   fix otherLocs[MAX_OTHER_TRACKERS];
   int activeLoc = 0;
   int dispMode = 0;

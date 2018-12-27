@@ -1,5 +1,19 @@
 #include "display.h"
 
+void initDisplay(State &state, Adafruit_SSD1306 &display){
+  
+  Serial.println("Display: init");
+  // initialize with the I2C addr 0x3C (for the 128x32)
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("hello " + String(state.callsign) + ".");
+  display.display();
+}
+
 const char* timeSince(unsigned long timestamp) {
   long elapsed = (millis() - timestamp) / 1000;
   int n;
@@ -94,7 +108,7 @@ void updateGpsDisplay(State &state, Adafruit_SSD1306 &display, TrackerGps &gps){
   sprintf(buff, "lon:%11.6f", gps.lon / 1e6);
   display.println(buff);
 
-  sprintf(buff, "acc:%4.0fm alt:%4dm", gps.hAccuracy, gps.altitude / 100);
+  sprintf(buff, "acc:%4.0fm alt:%4dm", gps.hAccuracy, (int) (gps.altitude / 100));
   display.println(buff);
 
   display.drawBitmap(17 * 6, 1 * LINE_PX, satIcon, 8, 8, 1);
@@ -203,6 +217,21 @@ String locationString(fix* loc, char nofixstr[], TrackerGps gps) {
   return line;
 }
 
+// void showHeading(fix* loc){
+//   float bearing = initialBearing(gps.lat, loc->lat, gps.lon, loc->lon);
+
+//   float diff = thisImu.heading - bearing;
+//   while (diff > 180)
+//     diff -= 360;
+//   while (diff < -180)
+//     diff += 180;
+
+//   int8_t offset = diff / 360.0 * 127;
+
+//   display.fillRect(64 - offset, 3*LINE_PX, 1, 8, 1);
+//   display.fillRect(63, 3*LINE_PX,3,2,1);
+// }
+
 void updateMainDisplay(State &state, Adafruit_SSD1306 &display, TrackerGps &gps) {
   fix theirLoc = state.otherLocs[state.activeLoc];
   int count = state.numTrackers();
@@ -239,4 +268,17 @@ void updateMainDisplay(State &state, Adafruit_SSD1306 &display, TrackerGps &gps)
   display.display();
 
   state.lastDisplay = millis();
+}
+
+void updateMainDisplay(State &state, Adafruit_SSD1306 &display, Imu &imu, TrackerGps &gps) {
+  switch(state.dispMode) {
+    case 0: updateMainDisplay(state, display, gps);
+      break;
+    case 1: updateGpsDisplay(state, display, gps);
+      break;
+    case 2: updateImuDisplay(state, display, imu);
+      break;
+    case 3: updateSystemDisplay(state, display);
+      break;
+    }
 }

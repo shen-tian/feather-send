@@ -17,6 +17,7 @@
 #include "Imu.h"
 #include "TrackerGps.h"
 #include "display.h"
+#include "lora.h"
 
 // Push buttons on the OLED wing
 #define A_PIN 9
@@ -28,10 +29,6 @@
 
 // Change to 434.0 or other frequency, must match RX's freq!
 #define RF95_FREQ 868.0
-
-// Dimension of the display
-#define LINE_PX 8
-#define LINE_LEN 20
 
 // Init display
 Adafruit_SSD1306 display = Adafruit_SSD1306(128, SCREEN_H);
@@ -75,17 +72,6 @@ uint8_t MAGIC_NUMBER[MAGIC_NUMBER_LEN] = {0x2c, 0x0b};
 
 uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
 
-// 4-line display
-void say(String s, String t, String u, String v) {
-  display.clearDisplay();
-  display.setCursor(0, 0);
-  display.println(s);
-  display.println(t);
-  display.println(u);
-  display.println(v);
-  display.display();
-}
-
 void processRecv() {
 
   Packet newPacket;
@@ -120,6 +106,19 @@ void processRecv() {
   state.otherLocs[slot] = theirLoc;
 }
 
+void tryReceive(){
+    if (rf95.available()) {
+    Serial.println("Got Data");
+    uint8_t len = sizeof(buf);
+    if (rf95.recv(buf, &len)) {
+      Serial.println("Packed received");
+      digitalWrite(LED_PIN, HIGH);
+      processRecv();
+      digitalWrite(LED_PIN, LOW);
+    }
+  }
+}
+
 void transmitData() {
   long sinceLastFix = millis() - gps.fixTimestamp;
   if (sinceLastFix > MAX_FIX_AGE) {
@@ -133,7 +132,7 @@ void transmitData() {
     newPacket.magicNumber[i] = MAGIC_NUMBER[i];
   }
   for (uint8_t i = 0; i < CALLSIGN_LEN; i++) {
-    newPacket.callsign[i] = state.myLoc.callsign[i];
+    newPacket.callsign[i] = state.callsign[i];
   }
 
   newPacket.lat = gps.lat;
@@ -150,21 +149,6 @@ void transmitData() {
   state.sending = false;
   state.lastSend = millis();
 }
-
-// void showHeading(fix* loc){
-//   float bearing = initialBearing(gps.lat, loc->lat, gps.lon, loc->lon);
-
-//   float diff = thisImu.heading - bearing;
-//   while (diff > 180)
-//     diff -= 360;
-//   while (diff < -180)
-//     diff += 180;
-
-//   int8_t offset = diff / 360.0 * 127;
-
-//   display.fillRect(64 - offset, 3*LINE_PX, 1, 8, 1);
-//   display.fillRect(63, 3*LINE_PX,3,2,1);
-// }
 
 void updateLeds(){
 
@@ -187,25 +171,6 @@ void updateLeds(){
   ledRing.update(thisImu.heading - target, col);
 }
 
-char spreadFactor(uint8_t spreadFactor){
-  switch(spreadFactor) {
-    case 7: return 0x70;
-    case 8: return 0x80;
-    case 9: return 0x90;
-    case 10: return 0xa0;
-    case 11: return 0xb0;
-    case 12: return 0xc0;
-    default: return 0x70;
-  }
-}
-
-void modemConfig(RH_RF95::ModemConfig* config, uint8_t bandwidth, uint8_t spreadFactor){
-
-  config->reg_1d = 0x70 + 0x02;
-  config->reg_1e = 0x70 + 0x04;
-  config->reg_26 = 0x00;
-}
-
 void initRadio(){
   
   pinMode(RFM95_RST, OUTPUT);
@@ -217,9 +182,9 @@ void initRadio(){
   digitalWrite(RFM95_RST, HIGH);
   delay(10);
 
-  while (!rf95.init()) {
-    say("LoRa init", "", "", "");
-    while (1);
+  if (!rf95.init()) {
+    Serial.println("LoRa init: error");
+    return;
   }
 
   Serial.println("LoRa init: successful");
@@ -231,9 +196,9 @@ void initRadio(){
   // PA_BOOST transmitter pin, then you can set transmitter
   // powers from 5 to 23 dBm:
 
-  if (!rf95.setFrequency(RF95_FREQ)) {
-    say("x1", "", "", "");
-    while (1);
+  if (!rf95.setFrequency(state.loraFreq)) {
+    Serial.println("LoRa set freq: error");
+    return;
   }
 
   Serial.println("LoRa set freq: successful");
@@ -247,19 +212,6 @@ void initRadio(){
   rf95.setTxPower(23, false);
 
   Serial.println("LoRa config modem: successful");
-}
-
-void initDisplay(){
-  
-  Serial.println("Display: init");
-  // initialize with the I2C addr 0x3C (for the 128x32)
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-
-  say("hello " + String(state.myLoc.callsign) + ".", "", "", "");
-  delay(3000);
-  display.clearDisplay();
 }
 
 // Main
@@ -276,13 +228,13 @@ void setup() {
 
   ledRing.init<NEO_PIN>();
 
-  strcpy(state.myLoc.callsign, CALLSIGN);
+  strcpy(state.callsign, CALLSIGN);
 
   pinMode(LED_PIN, OUTPUT);
   pinMode(B_PIN, INPUT_PULLUP);
   pinMode(C_PIN, INPUT_PULLUP);
 
-  initDisplay();
+  initDisplay(state, display);
   initRadio();
 
   thisImu.init();
@@ -341,16 +293,7 @@ void loop() {
     state.dispMode = (state.dispMode + 1) % 4;
   }
 
-  if (rf95.available()) {
-    Serial.println("Got Data");
-    uint8_t len = sizeof(buf);
-    if (rf95.recv(buf, &len)) {
-      Serial.println("Packed received");
-      digitalWrite(LED_PIN, HIGH);
-      processRecv();
-      digitalWrite(LED_PIN, LOW);
-    }
-  }
+  tryReceive();
 
   long sinceLastTransmit = millis() - state.lastSend;
   if (sinceLastTransmit < 0 || sinceLastTransmit > TRANSMIT_INTERVAL) {
@@ -360,15 +303,7 @@ void loop() {
 
   long sinceLastDisplayUpdate = millis() - state.lastDisplay;
   if (sinceLastDisplayUpdate < 0 || sinceLastDisplayUpdate > DISPLAY_INTERVAL) {
-    switch(state.dispMode) {
-    case 0: updateMainDisplay(state, display, gps);
-      break;
-    case 1: updateGpsDisplay(state, display, gps);
-      break;
-    case 2: updateImuDisplay(state, display, thisImu);
-      break;
-    case 3: updateSystemDisplay(state, display);
-      break;
-    }
+    if (millis() > 3000 || state.dispMode != 0)
+      updateMainDisplay(state, display, thisImu, gps);
   }
 }
