@@ -4,34 +4,39 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 
-class Imu {
-  private:
+class Imu
+{
+private:
   Adafruit_BNO055 _bno;
   float _magDeclination;
   uint8_t _sensorOffset;
   long _lastMovement;
   bool _exists;
 
-
-  public:
+public:
   imu::Vector<3> euler, mag, gyro;
   int8_t temperature;
   int32_t heading;
   uint8_t sysCal, gyroCal, accCal, magCal;
 
-  Imu(float magDeclination, uint8_t sensorOffset) {
+  Imu(float magDeclination, uint8_t sensorOffset)
+  {
     _magDeclination = magDeclination;
     _sensorOffset = sensorOffset;
     _lastMovement = 0;
   }
 
-  void init() {
+  void init()
+  {
     Serial.print("IMU init: ");
     _bno = Adafruit_BNO055();
-    if (!_bno.begin()) {
+    if (!_bno.begin())
+    {
       Serial.println("not found");
       _exists = false;
-    } else {
+    }
+    else
+    {
       Serial.println("successful");
       delay(100);
       _bno.setExtCrystalUse(true);
@@ -39,7 +44,8 @@ class Imu {
     }
   }
 
-  void update() {
+  void update()
+  {
     euler = _bno.getVector(Adafruit_BNO055::VECTOR_EULER);
     mag = _bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
     gyro = _bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
@@ -55,11 +61,13 @@ class Imu {
     _bno.getCalibration(&sysCal, &gyroCal, &accCal, &magCal);
   }
 
-  bool isStill() {
+  bool isStill()
+  {
     return millis() - _lastMovement > 1000;
   }
 
-  bool exists() {
+  bool exists()
+  {
     return _exists;
   }
 };

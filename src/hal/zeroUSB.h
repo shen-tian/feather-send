@@ -1,5 +1,5 @@
-# ifndef HAL_H
-# define HAL_H
+#ifndef HAL_H
+#define HAL_H
 
 // Arduino Zero (Rocket Scream HAL)
 

@@ -59,7 +59,7 @@ TrackerGps gps = TrackerGps();
 // Timing:
 #define TRANSMIT_INTERVAL 10000 // interval between sending updates
 #define DISPLAY_INTERVAL 150    // interval between updating display
-#define MAX_FIX_AGE 30000        // Ignore data from GPS if older
+#define MAX_FIX_AGE 30000       // Ignore data from GPS if older
 
 #define CALLSIGN_LEN 4
 #define CALLSIGN "DIGS"
@@ -72,20 +72,24 @@ uint8_t MAGIC_NUMBER[MAGIC_NUMBER_LEN] = {0x2c, 0x0b};
 
 uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
 
-void processRecv() {
+void processRecv()
+{
 
   Packet newPacket;
 
   memcpy(&newPacket, buf, sizeof(newPacket));
 
-  for (int i = 0; i < MAGIC_NUMBER_LEN; i++) {
-    if (MAGIC_NUMBER[i] != newPacket.magicNumber[i]) {
+  for (int i = 0; i < MAGIC_NUMBER_LEN; i++)
+  {
+    if (MAGIC_NUMBER[i] != newPacket.magicNumber[i])
+    {
       return;
     }
   }
 
   fix theirLoc;
-  for (int i = 0; i < CALLSIGN_LEN; i++) {
+  for (int i = 0; i < CALLSIGN_LEN; i++)
+  {
     theirLoc.callsign[i] = newPacket.callsign[i];
   }
 
@@ -97,8 +101,10 @@ void processRecv() {
   theirLoc.isAccurate = newPacket.isAccurate;
 
   int slot = 0; // will displace first if all slots are full
-  for (int i = 0; i < MAX_OTHER_TRACKERS; i++) {
-    if (strlen(state.otherLocs[i].callsign) == 0 || strcmp(theirLoc.callsign, state.otherLocs[i].callsign) == 0) {
+  for (int i = 0; i < MAX_OTHER_TRACKERS; i++)
+  {
+    if (strlen(state.otherLocs[i].callsign) == 0 || strcmp(theirLoc.callsign, state.otherLocs[i].callsign) == 0)
+    {
       slot = i;
       break;
     }
@@ -106,11 +112,14 @@ void processRecv() {
   state.otherLocs[slot] = theirLoc;
 }
 
-void tryReceive(){
-    if (rf95.available()) {
+void tryReceive()
+{
+  if (rf95.available())
+  {
     Serial.println("Got Data");
     uint8_t len = sizeof(buf);
-    if (rf95.recv(buf, &len)) {
+    if (rf95.recv(buf, &len))
+    {
       Serial.println("Packed received");
       digitalWrite(LED_PIN, HIGH);
       processRecv();
@@ -119,19 +128,23 @@ void tryReceive(){
   }
 }
 
-void transmitData() {
+void transmitData()
+{
   long sinceLastFix = millis() - gps.fixTimestamp;
-  if (sinceLastFix > MAX_FIX_AGE) {
+  if (sinceLastFix > MAX_FIX_AGE)
+  {
     // GPS data is stale
     return;
   }
 
   Packet newPacket;
 
-  for (int i = 0; i < MAGIC_NUMBER_LEN; i++) {
+  for (int i = 0; i < MAGIC_NUMBER_LEN; i++)
+  {
     newPacket.magicNumber[i] = MAGIC_NUMBER[i];
   }
-  for (uint8_t i = 0; i < CALLSIGN_LEN; i++) {
+  for (uint8_t i = 0; i < CALLSIGN_LEN; i++)
+  {
     newPacket.callsign[i] = state.callsign[i];
   }
 
@@ -141,26 +154,29 @@ void transmitData() {
 
   state.sending = true;
   digitalWrite(LED_PIN, HIGH);
-   
-  rf95.send((uint8_t*)&newPacket, sizeof(newPacket));
+
+  rf95.send((uint8_t *)&newPacket, sizeof(newPacket));
   rf95.waitPacketSent();
   digitalWrite(LED_PIN, LOW);
-   
+
   state.sending = false;
   state.lastSend = millis();
 }
 
-void updateLeds(){
+void updateLeds()
+{
 
   float target = 0;
 
-  if (state.dispMode == 0) {
-     fix theirLoc = state.otherLocs[state.activeLoc];
-     int count = state.numTrackers();
+  if (state.dispMode == 0)
+  {
+    fix theirLoc = state.otherLocs[state.activeLoc];
+    int count = state.numTrackers();
 
-     if (count > 0) {
-       target = initialBearing(gps.lat, theirLoc.lat, gps.lon, theirLoc.lon);
-     }
+    if (count > 0)
+    {
+      target = initialBearing(gps.lat, theirLoc.lat, gps.lon, theirLoc.lon);
+    }
   }
 
   uint8_t col = (thisImu.magCal > 1) ? 127 : 0;
@@ -171,8 +187,9 @@ void updateLeds(){
   ledRing.update(thisImu.heading - target, col);
 }
 
-void initRadio(){
-  
+void initRadio()
+{
+
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
 
@@ -182,7 +199,8 @@ void initRadio(){
   digitalWrite(RFM95_RST, HIGH);
   delay(10);
 
-  if (!rf95.init()) {
+  if (!rf95.init())
+  {
     Serial.println("LoRa init: error");
     return;
   }
@@ -196,7 +214,8 @@ void initRadio(){
   // PA_BOOST transmitter pin, then you can set transmitter
   // powers from 5 to 23 dBm:
 
-  if (!rf95.setFrequency(state.loraFreq)) {
+  if (!rf95.setFrequency(state.loraFreq))
+  {
     Serial.println("LoRa set freq: error");
     return;
   }
@@ -216,13 +235,15 @@ void initRadio(){
 
 // Main
 
-void setup() {
+void setup()
+{
 
   state.loraFreq = RF95_FREQ;
 
   Serial.begin(9600);
 
-  while (!Serial && (millis() < 3000)) {
+  while (!Serial && (millis() < 3000))
+  {
     delay(100);
   }
 
@@ -252,7 +273,8 @@ void setup() {
   ledRing.poke();
 }
 
-void loop() {
+void loop()
+{
 
   updateLeds();
 
@@ -262,7 +284,8 @@ void loop() {
   long timeSinceFix = t - gps.fixTimestamp;
 
   if (gps.hasFix() &&
-      timeSinceFix < maxGpsAge) {
+      timeSinceFix < maxGpsAge)
+  {
     gps.standby();
   }
 
@@ -272,7 +295,8 @@ void loop() {
   gps.tryRead();
 #endif
 
-  if (thisImu.exists()) {
+  if (thisImu.exists())
+  {
     thisImu.update();
     if (!thisImu.isStill())
       ledRing.poke();
@@ -281,28 +305,33 @@ void loop() {
   buttonB.update();
   buttonC.update();
 
-  if (buttonC.fell()) {
+  if (buttonC.fell())
+  {
     // button is pressed -- trigger action
     int count = state.numTrackers();
-    if (count > 0) {
+    if (count > 0)
+    {
       state.activeLoc = (state.activeLoc + 1) % count;
     }
   }
 
-  if (buttonB.fell()) {
+  if (buttonB.fell())
+  {
     state.dispMode = (state.dispMode + 1) % 4;
   }
 
   tryReceive();
 
   long sinceLastTransmit = millis() - state.lastSend;
-  if (sinceLastTransmit < 0 || sinceLastTransmit > TRANSMIT_INTERVAL) {
+  if (sinceLastTransmit < 0 || sinceLastTransmit > TRANSMIT_INTERVAL)
+  {
     transmitData();
     //rf95.sleep();
   }
 
   long sinceLastDisplayUpdate = millis() - state.lastDisplay;
-  if (sinceLastDisplayUpdate < 0 || sinceLastDisplayUpdate > DISPLAY_INTERVAL) {
+  if (sinceLastDisplayUpdate < 0 || sinceLastDisplayUpdate > DISPLAY_INTERVAL)
+  {
     if (millis() > 3000 || state.dispMode != 0)
       updateMainDisplay(state, display, thisImu, gps);
   }

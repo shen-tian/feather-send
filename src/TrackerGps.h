@@ -4,17 +4,17 @@
 #include <TinyGPS.h>
 
 // 95% error radius at HDOP=1
-#define GPS_BASE_ACCURACY 6.2  // m
-#define ACCURACY_THRESHOLD 30  // m
+#define GPS_BASE_ACCURACY 6.2 // m
+#define ACCURACY_THRESHOLD 30 // m
 
-class TrackerGps {
- private:
+class TrackerGps
+{
+private:
   bool _standby = false;
   TinyGPS _parser;
 
- public:
-
-  int32_t lat, lon; // millionth of degrees
+public:
+  int32_t lat, lon;           // millionth of degrees
   unsigned long fixTimestamp; // ms
 
   int year;
@@ -27,7 +27,7 @@ class TrackerGps {
 
   bool isAccurate;
 
-  TrackerGps() {};
+  TrackerGps(){};
 
   void init();
 

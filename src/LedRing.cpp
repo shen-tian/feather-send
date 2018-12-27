@@ -1,6 +1,7 @@
 #include "LedRing.h"
 
-LedRing::LedRing (const uint8_t numLeds, const float offset) {
+LedRing::LedRing(const uint8_t numLeds, const float offset)
+{
   _dispHeading = 0;
   _offset = offset;
   _numLeds = numLeds;
@@ -8,13 +9,15 @@ LedRing::LedRing (const uint8_t numLeds, const float offset) {
   _lastTouch = millis();
 }
 
-void LedRing::initRing(){
+void LedRing::initRing()
+{
   for (int i = 0; i < _numLeds; i++)
     _leds[i] = CRGB::Black;
   FastLED.show();
 }
 
-void LedRing::update(float targetBearing, uint8_t color){
+void LedRing::update(float targetBearing, uint8_t color)
+{
   uint8_t target = (uint8_t)((targetBearing + _offset) * 0.7111);
 
   int8_t gap = target - _dispHeading;
@@ -41,14 +44,16 @@ void LedRing::update(float targetBearing, uint8_t color){
   FastLED.show();
 }
 
-void LedRing::goRed(){
+void LedRing::goRed()
+{
   for (int i = 0; i < _numLeds; i++)
     _leds[i] = CRGB::Red;
 
   FastLED.show();
 }
 
-void LedRing::poke(){
+void LedRing::poke()
+{
   _lastTouch = millis();
   _brightness = 255;
 }

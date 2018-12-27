@@ -1,5 +1,5 @@
-# ifndef HAL_H
-# define HAL_H
+#ifndef HAL_H
+#define HAL_H
 
 // This file is just here to make VSCode happy
 

@@ -1,5 +1,5 @@
-# ifndef HAL_H
-# define HAL_H
+#ifndef HAL_H
+#define HAL_H
 
 // Adafruit Feather M0
 
@@ -17,4 +17,4 @@
 #define HAS_GPS
 #define HAS_IMU
 
-# endif
+#endif

@@ -1,20 +1,26 @@
 #include "TrackerGps.h"
 
-void TrackerGps::init() {
+void TrackerGps::init()
+{
   Serial1.begin(9600);
   Serial1.println("$PMTK220,1000*1F");
 }
 
-void TrackerGps::standby() {
-  if (!_standby){
+void TrackerGps::standby()
+{
+  if (!_standby)
+  {
     Serial1.println("$PMTK161,0*28");
     _standby = true;
   }
 }
 
-void TrackerGps::wake() {
-  if (_standby){
-    for (int i = 0; i < 3; i++) {
+void TrackerGps::wake()
+{
+  if (_standby)
+  {
+    for (int i = 0; i < 3; i++)
+    {
       Serial1.println("");
       delay(100);
     }
@@ -22,25 +28,31 @@ void TrackerGps::wake() {
   }
 }
 
-bool TrackerGps::isAwake() {
+bool TrackerGps::isAwake()
+{
   return !_standby;
 }
 
-bool TrackerGps::hasFix() {
+bool TrackerGps::hasFix()
+{
   return numSats > 0;
 }
 
-void TrackerGps::tryRead() {
-  if (!_standby && Serial1.available()) {
+void TrackerGps::tryRead()
+{
+  if (!_standby && Serial1.available())
+  {
     char c = Serial1.read();
-    if (_parser.encode(c)) {
+    if (_parser.encode(c))
+    {
       int32_t newLat, newLon;
       unsigned long newAge;
 
       _parser.get_position(&newLat, &newLon, &newAge);
       if (newAge != TinyGPS::GPS_INVALID_AGE &&
           newLat != TinyGPS::GPS_INVALID_ANGLE &&
-          newLon != TinyGPS::GPS_INVALID_ANGLE) {
+          newLon != TinyGPS::GPS_INVALID_ANGLE)
+      {
         fixTimestamp = millis() - newAge;
         lat = newLat;
         lon = newLon;
@@ -51,9 +63,12 @@ void TrackerGps::tryRead() {
 
       float hdop = _parser.hdop();
 
-      if (hdop == TinyGPS::GPS_INVALID_HDOP) {
+      if (hdop == TinyGPS::GPS_INVALID_HDOP)
+      {
         hAccuracy = -1;
-      } else {
+      }
+      else
+      {
         hAccuracy = 1e-2 * hdop * GPS_BASE_ACCURACY;
       }
 
