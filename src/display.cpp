@@ -133,21 +133,28 @@ void updateGpsDisplay(State &state, Adafruit_SSD1306 &display, TrackerGps &gps)
 void updateImuDisplay(State &state, Adafruit_SSD1306 &display, Imu &imu)
 {
   display.clearDisplay();
+  display.setCursor(0, 0);
+
   char buff[20];
 
-  sprintf(buff, "br %3ld tp %2d S%dG%dA%dM%d", imu.heading, imu.temperature, imu.sysCal, imu.gyroCal, imu.accCal, imu.magCal);
-  display.setCursor(0, 0);
-  display.println(buff);
+  if (imu.exists()) 
+  {
+    sprintf(buff, "br %3ld tp %2d S%dG%dA%dM%d", imu.heading, imu.temperature, imu.sysCal, imu.gyroCal, imu.accCal, imu.magCal);
+    display.println(buff);
 
-  sprintf(buff, "eu x%5.0fy%5.0fz%5.0f", imu.euler.x(), imu.euler.y(), imu.euler.z());
-  display.println(buff);
+    sprintf(buff, "eu x%5.0fy%5.0fz%5.0f", imu.euler.x(), imu.euler.y(), imu.euler.z());
+    display.println(buff);
 
-  sprintf(buff, "ma x%5.1fy%5.1fz%5.1f", imu.mag.x(), imu.mag.y(), imu.mag.z());
-  display.println(buff);
+    sprintf(buff, "ma x%5.1fy%5.1fz%5.1f", imu.mag.x(), imu.mag.y(), imu.mag.z());
+    display.println(buff);
 
-  sprintf(buff, "gy x%5.1fy%5.1fz%5.1f", imu.gyro.x(), imu.gyro.y(), imu.gyro.z());
-  display.println(buff);
-
+    sprintf(buff, "gy x%5.1fy%5.1fz%5.1f", imu.gyro.x(), imu.gyro.y(), imu.gyro.z());
+    display.println(buff);
+  }
+  else
+  {
+    display.println("No IMU installed");
+  }
   display.display();
   state.lastDisplay = millis();
 }
@@ -202,7 +209,7 @@ float distanceFromLoc(int lat0, int lat1, int lon0, int lon1)
 
   float a = sin(dt / 2) * sin(dt / 2) +
             cos(t0) * cos(t1) *
-                sin(dl / 2) * sin(dl / 2);
+            sin(dl / 2) * sin(dl / 2);
   float c = 2 * atan2(sqrt(a), sqrt(1 - a));
 
   return R * c;
