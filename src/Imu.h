@@ -25,6 +25,7 @@ class Imu {
   }
 
   void init() {
+    Serial.println("IMU init: ");
     while(!_bno.begin()) {
     }
     delay(100);

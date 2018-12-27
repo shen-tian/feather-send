@@ -6,10 +6,16 @@
 #include <Adafruit_GFX.h>
 #include <Bounce2.h>
 
+#include "hal/default.h"
+
 #include "FreeMemory.h"
 #include "LedRing.h"
 #include "Imu.h"
 #include "TrackerGps.h"
+
+#ifdef ROCKET_SCREAM
+#define Serial SerialUSB
+#endif
 
 // Pin layout
 
@@ -21,20 +27,15 @@
 // Builtin LED
 #define LED_PIN 13
 
-//LoRA radio for feather m0
-#define RFM95_CS 8
-#define RFM95_RST 4
-#define RFM95_INT 3
-
 // Change to 434.0 or other frequency, must match RX's freq!
-#define RF95_FREQ 915.0
+#define RF95_FREQ 868.0
 
 // Dimension of the display
 #define LINE_PX 8
 #define LINE_LEN 20
 
 // Init display
-Adafruit_SSD1306 display = Adafruit_SSD1306();
+Adafruit_SSD1306 display = Adafruit_SSD1306(128, SCREEN_H);
 
 // LEDs
 #define NUM_LEDS 12
@@ -588,8 +589,14 @@ void updateSystemDisplay(){
   display.clearDisplay();
   char buff[20];
 
-  float measuredvbat = analogRead(A7);
-  measuredvbat *= (2 * 3.3 / 1024);
+  float measuredvbat = 0;
+  
+  for (int i = 0; i < 8; i++)
+    measuredvbat += analogRead(VBAT_PIN);
+
+  measuredvbat /= 8;
+
+  measuredvbat *= VBAT_RATIO;
   sprintf(buff, "VBatt: %.2fV", measuredvbat);
   display.setCursor(0, 0);
   display.println(buff);
@@ -627,6 +634,11 @@ void modemConfig(RH_RF95::ModemConfig* config, uint8_t bandwidth, uint8_t spread
 }
 
 void initRadio(){
+
+  // Rocket scream only
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH);
+  
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
 
@@ -637,9 +649,11 @@ void initRadio(){
   delay(10);
 
   while (!rf95.init()) {
-    say("x0", "", "", "");
+    say("LoRa init", "", "", "");
     while (1);
   }
+
+  Serial.println("LoRa init: successful");
 
   // Defaults after init are 434.0MHz, 13dBm using PA_BOOST
   // Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
@@ -653,6 +667,8 @@ void initRadio(){
     while (1);
   }
 
+  Serial.println("LoRa set freq: successful");
+
   RH_RF95::ModemConfig config;
 
   modemConfig(&config, 125, 7);
@@ -660,9 +676,14 @@ void initRadio(){
   rf95.setModemRegisters(&config);
 
   rf95.setTxPower(23, false);
+
+  Serial.println("LoRa config modem: successful");
 }
 
 void initDisplay(){
+  Serial.begin(9600);
+  while(!Serial)
+  Serial.println("Display: init");
   // initialize with the I2C addr 0x3C (for the 128x32)
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.setTextSize(1);
@@ -687,10 +708,14 @@ void setup() {
 
   initDisplay();
   initRadio();
-  thisImu.init();
 
-  // GPS
+#ifdef HAS_IMU
+  thisImu.init();
+#endif 
+
+#ifdef HAS_GPS
   gps.init();
+#endif
 
   buttonB.attach(B_PIN);
   buttonB.interval(5);
@@ -702,11 +727,12 @@ void setup() {
 }
 
 void loop() {
-  thisImu.update();
+
   updateLeds();
 
   long t = millis();
 
+#ifdef HAS_GPS
   long maxGpsAge = thisImu.isStill() ? 30000 : 500;
   long timeSinceFix = t - gps.fixTimestamp;
 
@@ -719,9 +745,13 @@ void loop() {
     gps.wake();
 
   gps.tryRead();
+#endif
 
+#ifdef HAS_IMU
+  thisImu.update();
   if (!thisImu.isStill())
     ledRing.poke();
+#endif 
 
   buttonB.update();
   buttonC.update();
@@ -739,8 +769,10 @@ void loop() {
   }
 
   if (rf95.available()) {
+    Serial.println("Got Data");
     uint8_t len = sizeof(buf);
     if (rf95.recv(buf, &len)) {
+      Serial.println("Packed received");
       digitalWrite(LED_PIN, HIGH);
       processRecv();
       digitalWrite(LED_PIN, LOW);
