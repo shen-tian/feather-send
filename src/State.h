@@ -48,6 +48,16 @@ class State {
   bool sending = false;
 
   State() {}
+
+  int numTrackers() {
+    int i;
+    for (i = 0; i < MAX_OTHER_TRACKERS; i++) {
+      if (strlen(otherLocs[i].callsign) == 0) {
+        break;  
+      }
+    }
+    return i;
+  }
 };
 
 #endif
