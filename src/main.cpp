@@ -8,14 +8,16 @@
 
 #include "hal/default.h"
 
+#ifdef ROCKET_SCREAM
+#define Serial SerialUSB
+#endif
+
 #include "FreeMemory.h"
 #include "LedRing.h"
 #include "Imu.h"
 #include "TrackerGps.h"
 
-#ifdef ROCKET_SCREAM
-#define Serial SerialUSB
-#endif
+
 
 // Pin layout
 
@@ -70,7 +72,7 @@ unsigned long lastSend, lastDisplay;
 bool sending = false;
 
 #define CALLSIGN_LEN 4
-#define CALLSIGN "BUTT"
+#define CALLSIGN "DIGS"
 
 #define MAX_OTHER_TRACKERS 5
 
@@ -108,20 +110,13 @@ int activeLoc = 0;
 
 int dispMode = 0;
 
-#define NUM_MODES 2
-
 #define MAGIC_NUMBER_LEN 2
 
 uint8_t MAGIC_NUMBER[MAGIC_NUMBER_LEN] = {0x2c, 0x0b};
 
 uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
 
-// set > 1 to simulate more than one tracker for testing purposes
-int numVirtualTrackers = 1;
-int virtualTrackerNum = 0;
-
 // Start the geometry geography stuff
-
 
 #define OTHER_LOC_STALENESS 120000
 
@@ -432,8 +427,12 @@ String locationString(fix* loc, char nofixstr[])
 
   float bearing = initialBearing(gps.lat, loc->lat, gps.lon, loc->lon);
 
-  sprintf(line, "%.1fm away, %.0fdeg", distance, bearing);
-
+  if (distance < 1000) {
+    sprintf(line, "%.0fm away, %.0fdeg", distance, bearing);
+  } else {
+    sprintf(line, "%.1fkm away, %.0fdeg ", distance/1000, bearing);
+  }
+  
   return line;
 }
 
@@ -634,10 +633,6 @@ void modemConfig(RH_RF95::ModemConfig* config, uint8_t bandwidth, uint8_t spread
 }
 
 void initRadio(){
-
-  // Rocket scream only
-  pinMode(4, OUTPUT);
-  digitalWrite(4, HIGH);
   
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
@@ -681,8 +676,7 @@ void initRadio(){
 }
 
 void initDisplay(){
-  Serial.begin(9600);
-  while(!Serial)
+  
   Serial.println("Display: init");
   // initialize with the I2C addr 0x3C (for the 128x32)
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
@@ -697,6 +691,11 @@ void initDisplay(){
 // Main
 
 void setup() {
+  Serial.begin(9600);
+
+  while (!Serial && (millis() < 3000)) {
+    delay(100);
+  }
 
   ledRing.init<NEO_PIN>();
 
@@ -709,9 +708,7 @@ void setup() {
   initDisplay();
   initRadio();
 
-#ifdef HAS_IMU
   thisImu.init();
-#endif 
 
 #ifdef HAS_GPS
   gps.init();
@@ -730,9 +727,8 @@ void loop() {
 
   updateLeds();
 
-  long t = millis();
-
 #ifdef HAS_GPS
+  long t = millis();
   long maxGpsAge = thisImu.isStill() ? 30000 : 500;
   long timeSinceFix = t - gps.fixTimestamp;
 
@@ -747,11 +743,11 @@ void loop() {
   gps.tryRead();
 #endif
 
-#ifdef HAS_IMU
-  thisImu.update();
-  if (!thisImu.isStill())
-    ledRing.poke();
-#endif 
+  if (thisImu.exists()) {
+    thisImu.update();
+    if (!thisImu.isStill())
+      ledRing.poke();
+  }
 
   buttonB.update();
   buttonC.update();

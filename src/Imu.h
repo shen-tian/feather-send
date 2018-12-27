@@ -6,10 +6,11 @@
 
 class Imu {
   private:
-  Adafruit_BNO055 _bno = Adafruit_BNO055();
+  Adafruit_BNO055 _bno;
   float _magDeclination;
   uint8_t _sensorOffset;
   long _lastMovement;
+  bool _exists;
 
 
   public:
@@ -25,11 +26,17 @@ class Imu {
   }
 
   void init() {
-    Serial.println("IMU init: ");
-    while(!_bno.begin()) {
+    Serial.print("IMU init: ");
+    _bno = Adafruit_BNO055();
+    if (!_bno.begin()) {
+      Serial.println("not found");
+      _exists = false;
+    } else {
+      Serial.println("successful");
+      delay(100);
+      _bno.setExtCrystalUse(true);
+      _exists = true;
     }
-    delay(100);
-    _bno.setExtCrystalUse(true);
   }
 
   void update() {
@@ -50,6 +57,10 @@ class Imu {
 
   bool isStill() {
     return millis() - _lastMovement > 1000;
+  }
+
+  bool exists() {
+    return _exists;
   }
 };
 

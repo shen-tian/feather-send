@@ -18,4 +18,9 @@
 
 #define SCREEN_H 32
 
+// Component toggles
+
+#define HAS_GPS
+#define HAS_IMU
+
 #endif
