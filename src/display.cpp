@@ -1,6 +1,8 @@
 #include "display.h"
 
-void initDisplay(State &state, Adafruit_SSD1306 &display)
+Adafruit_SSD1306 display = Adafruit_SSD1306(128, SCREEN_H);
+
+void initDisplay(State &state)
 {
 
   Serial.println("Display: init");
@@ -48,7 +50,7 @@ const char *timeSince(unsigned long timestamp)
   return buff;
 }
 
-void updateSystemDisplay(State &state, Adafruit_SSD1306 &display)
+void updateSystemDisplay(State &state)
 {
   display.clearDisplay();
 
@@ -79,7 +81,7 @@ void updateSystemDisplay(State &state, Adafruit_SSD1306 &display)
   state.lastDisplay = millis();
 }
 
-void updateGpsDisplay(State &state, Adafruit_SSD1306 &display, TrackerGps &gps)
+void updateGpsDisplay(State &state, TrackerGps &gps)
 {
   display.clearDisplay();
   char buff[50];
@@ -130,7 +132,7 @@ void updateGpsDisplay(State &state, Adafruit_SSD1306 &display, TrackerGps &gps)
   state.lastDisplay = millis();
 }
 
-void updateImuDisplay(State &state, Adafruit_SSD1306 &display, Imu &imu)
+void updateImuDisplay(State &state, Imu &imu)
 {
   display.clearDisplay();
   display.setCursor(0, 0);
@@ -267,7 +269,7 @@ String locationString(fix *loc, char nofixstr[], TrackerGps gps)
 //   display.fillRect(63, 3*LINE_PX,3,2,1);
 // }
 
-void updateMainDisplay(State &state, Adafruit_SSD1306 &display, TrackerGps &gps)
+void updateMainDisplay(State &state, TrackerGps &gps)
 {
   fix theirLoc = state.otherLocs[state.activeLoc];
   int count = state.numTrackers();
@@ -310,21 +312,21 @@ void updateMainDisplay(State &state, Adafruit_SSD1306 &display, TrackerGps &gps)
   state.lastDisplay = millis();
 }
 
-void updateMainDisplay(State &state, Adafruit_SSD1306 &display, Imu &imu, TrackerGps &gps)
+void updateMainDisplay(State &state, Imu &imu, TrackerGps &gps)
 {
   switch (state.dispMode)
   {
   case 0:
-    updateMainDisplay(state, display, gps);
+    updateMainDisplay(state, gps);
     break;
   case 1:
-    updateGpsDisplay(state, display, gps);
+    updateGpsDisplay(state, gps);
     break;
   case 2:
-    updateImuDisplay(state, display, imu);
+    updateImuDisplay(state, imu);
     break;
   case 3:
-    updateSystemDisplay(state, display);
+    updateSystemDisplay(state);
     break;
   }
 }

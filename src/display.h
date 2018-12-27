@@ -2,6 +2,7 @@
 #define DISPLAY_H
 
 #include <Adafruit_SSD1306.h>
+#include <Adafruit_GFX.h>
 
 #include "State.h"
 #include "hal/default.h"
@@ -19,17 +20,9 @@
 const uint8_t satIcon[] PROGMEM = {0x00, 0x26, 0x74, 0x38, 0x14, 0x68, 0x40, 0x00};
 const uint8_t altIcon[] PROGMEM = {0x00, 0x00, 0x18, 0x1c, 0x7e, 0x7e, 0xff, 0x00};
 
-void initDisplay(State &state, Adafruit_SSD1306 &display);
+void initDisplay(State &state);
 
-void updateSystemDisplay(State &state, Adafruit_SSD1306 &display);
-
-void updateGpsDisplay(State &state, Adafruit_SSD1306 &display, TrackerGps &gps);
-
-void updateImuDisplay(State &state, Adafruit_SSD1306 &display, Imu &imu);
-
-void updateMainDisplay(State &state, Adafruit_SSD1306 &display, TrackerGps &gps);
-
-void updateMainDisplay(State &state, Adafruit_SSD1306 &display, Imu &imu, TrackerGps &gps);
+void updateMainDisplay(State &state, Imu &imu, TrackerGps &gps);
 
 float initialBearing(int lat0, int lat1, int lon0, int lon1);
 

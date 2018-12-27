@@ -1,9 +1,7 @@
 #include <RH_RF95.h>
-#include <Adafruit_SSD1306.h>
 
 #include <Wire.h>
 #include <SPI.h>
-#include <Adafruit_GFX.h>
 #include <Bounce2.h>
 
 #include "hal/default.h"
@@ -29,9 +27,6 @@
 
 // Change to 434.0 or other frequency, must match RX's freq!
 #define RF95_FREQ 868.0
-
-// Init display
-Adafruit_SSD1306 display = Adafruit_SSD1306(128, SCREEN_H);
 
 // LEDs
 #define NUM_LEDS 12
@@ -255,7 +250,7 @@ void setup()
   pinMode(B_PIN, INPUT_PULLUP);
   pinMode(C_PIN, INPUT_PULLUP);
 
-  initDisplay(state, display);
+  initDisplay(state);
   initRadio();
 
   thisImu.init();
@@ -333,6 +328,6 @@ void loop()
   if (sinceLastDisplayUpdate < 0 || sinceLastDisplayUpdate > DISPLAY_INTERVAL)
   {
     if (millis() > 3000 || state.dispMode != 0)
-      updateMainDisplay(state, display, thisImu, gps);
+      updateMainDisplay(state, thisImu, gps);
   }
 }
