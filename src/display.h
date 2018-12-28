@@ -4,8 +4,13 @@
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_GFX.h>
 
-#include "State.h"
 #include "hal/default.h"
+
+#ifdef ROCKET_SCREAM
+#define Serial SerialUSB
+#endif
+
+#include "State.h"
 #include "FreeMemory.h"
 #include "TrackerGps.h"
 #include "Imu.h"

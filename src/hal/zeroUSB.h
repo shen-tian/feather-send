@@ -20,4 +20,7 @@
 
 #define SCREEN_H 64
 
+// Builtin LED
+#define LED_PIN 13
+
 #endif

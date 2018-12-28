@@ -17,4 +17,7 @@
 #define HAS_GPS
 #define HAS_IMU
 
+// Builtin LED
+#define LED_PIN 13
+
 #endif
