@@ -16,6 +16,7 @@
 #include "TrackerGps.h"
 #include "display.h"
 #include "lora.h"
+#include "mac.h"
 
 // Push buttons on the OLED wing
 #define A_PIN 9
@@ -86,7 +87,6 @@ void updateLeds()
 
 void setup()
 {
-
   state.loraFreq = RF95_FREQ;
 
   Serial.begin(9600);
@@ -106,8 +106,8 @@ void setup()
 
   initDisplay(state);
   initRadio(state, rf95);
-
   thisImu.init();
+  //printMac();
 
 #ifdef HAS_GPS
   gps.init();
