@@ -18,27 +18,17 @@
 #include "lora.h"
 #include "mac.h"
 
-// Push buttons on the OLED wing
-#define A_PIN 9
-#define B_PIN 6
-#define C_PIN 5
-
-// Change to 434.0 or other frequency, must match RX's freq!
+// Config
 #define RF95_FREQ 868.0
+#define CALLSIGN "DIGS"
 
-// LEDs
-#define NUM_LEDS 12
-#define LED_OFFSET 285
-#define NEO_PIN 10
+// LED Ring
 
-LedRing ledRing = LedRing(NUM_LEDS, LED_OFFSET);
+LedRing ledRing = LedRing();
 
 // IMU
 
-#define MAG_DEC -25
-#define SENSOR_HEADING 90
-
-Imu thisImu = Imu(MAG_DEC, SENSOR_HEADING);
+Imu thisImu = Imu();
 
 // Singleton instance of the radio driver
 RH_RF95 rf95 = RH_RF95(RFM95_CS, RFM95_INT);
@@ -53,9 +43,6 @@ TrackerGps gps = TrackerGps();
 #define TRANSMIT_INTERVAL 10000 // interval between sending updates
 #define DISPLAY_INTERVAL 150    // interval between updating display
 #define MAX_FIX_AGE 30000       // Ignore data from GPS if older
-
-#define CALLSIGN_LEN 4
-#define CALLSIGN "DIGS"
 
 State state = State();
 
@@ -96,7 +83,7 @@ void setup()
     delay(100);
   }
 
-  ledRing.init<NEO_PIN>();
+  ledRing.init();
 
   strcpy(state.callsign, CALLSIGN);
 

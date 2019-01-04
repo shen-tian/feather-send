@@ -8,8 +8,6 @@ class Imu
 {
 private:
   Adafruit_BNO055 _bno;
-  float _magDeclination;
-  uint8_t _sensorOffset;
   long _lastMovement;
   bool _exists;
 
@@ -19,10 +17,8 @@ public:
   int32_t heading;
   uint8_t sysCal, gyroCal, accCal, magCal;
 
-  Imu(float magDeclination, uint8_t sensorOffset)
+  Imu()
   {
-    _magDeclination = magDeclination;
-    _sensorOffset = sensorOffset;
     _lastMovement = 0;
   }
 
@@ -51,7 +47,7 @@ public:
     gyro = _bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
     temperature = _bno.getTemp();
 
-    heading = euler.x() + _magDeclination + _sensorOffset;
+    heading = euler.x() + MAG_DEC + SENSOR_HEADING;
     if (heading > 360)
       heading -= 360;
 

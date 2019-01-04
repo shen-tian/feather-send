@@ -3,26 +3,24 @@
 
 #include <FastLED.h>
 
+#include "hal/default.h"
+
 class LedRing
 {
 private:
   CRGB *_leds;
   uint8_t _dispHeading;
-  uint8_t _numLeds;
-  float _offset;
-
   uint8_t _brightness;
   long _lastTouch;
 
   void initRing();
 
 public:
-  LedRing(const uint8_t numLeds, const float offset);
+  LedRing();
 
-  template <uint8_t DATA_PIN>
   void init()
   {
-    FastLED.addLeds<WS2812B, DATA_PIN, GRB>(_leds, _numLeds);
+    FastLED.addLeds<WS2812B, NEO_PIN, GRB>(_leds, NUM_LEDS);
     initRing();
   }
 
