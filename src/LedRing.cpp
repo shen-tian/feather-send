@@ -42,6 +42,12 @@ void LedRing::update(float targetBearing, uint8_t color)
   FastLED.show();
 }
 
+void LedRing::dim()
+{
+  fade_raw(_leds, NUM_LEDS, 16);
+  FastLED.show();
+}
+
 void LedRing::goRed()
 {
   for (int i = 0; i < NUM_LEDS; i++)

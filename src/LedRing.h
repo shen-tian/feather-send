@@ -26,6 +26,8 @@ public:
 
   void update(float targetBearing, uint8_t color);
 
+  void dim();
+
   void poke();
 
   void goRed();

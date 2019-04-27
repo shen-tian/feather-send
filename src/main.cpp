@@ -19,8 +19,8 @@
 #include "mac.h"
 
 // Config
-#define RF95_FREQ 868.0
-#define CALLSIGN "DIGS"
+#define RF95_FREQ 915.0
+#define CALLSIGN "AQUA"
 
 // LED Ring
 
@@ -60,14 +60,14 @@ void updateLeds()
     {
       target = initialBearing(gps.lat, theirLoc.lat, gps.lon, theirLoc.lon);
     }
+
+    uint8_t col = (thisImu.magCal > 1) ? 127 : 0;
+    ledRing.update(thisImu.heading - target, col);
   }
-
-  uint8_t col = (thisImu.magCal > 1) ? 127 : 0;
-
-  if (state.dispMode == 0)
-    col += 64;
-
-  ledRing.update(thisImu.heading - target, col);
+  else
+  {
+    ledRing.dim();
+  }
 }
 
 // Main
