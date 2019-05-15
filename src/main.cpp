@@ -116,17 +116,17 @@ void loop()
 
 #ifdef HAS_GPS
   long t = millis();
-  long maxGpsAge = thisImu.isStill() ? 30000 : 500;
+  long maxGpsAge = thisImu.isStill() ? 500 : 500;
   long timeSinceFix = t - gps.fixTimestamp;
 
-  if (gps.hasFix() &&
-      timeSinceFix < maxGpsAge)
-  {
-    gps.standby();
-  }
+  // if (gps.hasFix() &&
+  //     timeSinceFix < maxGpsAge)
+  // {
+  //   gps.standby();
+  // }
 
   if (timeSinceFix > maxGpsAge)
-    gps.wake();
+     gps.wake();
 
   gps.tryRead();
 #endif

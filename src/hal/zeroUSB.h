@@ -20,6 +20,8 @@
 
 #define SCREEN_H 64
 
+#define HAS_GPS
+
 // Builtin LED
 #define LED_PIN 13
 

@@ -4,6 +4,9 @@ void TrackerGps::init()
 {
   Serial1.begin(9600);
   Serial1.println("$PMTK220,1000*1F");
+
+  // https://github.com/adafruit/Adafruit_GPS/blob/master/Adafruit_GPS.h
+  Serial1.println("$PMTK314,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0*28");
 }
 
 void TrackerGps::standby()
@@ -40,7 +43,7 @@ bool TrackerGps::hasFix()
 
 void TrackerGps::tryRead()
 {
-  if (!_standby && Serial1.available())
+  while (!_standby && Serial1.available())
   {
     char c = Serial1.read();
     if (_parser.encode(c))
