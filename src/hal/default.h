@@ -28,7 +28,7 @@
 
 // LEDs
 #define NUM_LEDS 12
-#define LED_OFFSET 285
+#define LED_OFFSET 270
 #define NEO_PIN 10
 
 // Push buttons on the OLED wing
@@ -39,6 +39,6 @@
 // Magnetic sensor
 
 #define MAG_DEC -25
-#define SENSOR_HEADING 90
+#define SENSOR_HEADING -90
 
 #endif

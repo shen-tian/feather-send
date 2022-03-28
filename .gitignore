@@ -1,6 +1,7 @@
 .pioenvs
 .piolibdeps
 .clang_complete
+.pio
 
 .vscode/*
 .vscode/.browse.c_cpp.db*
