@@ -25,7 +25,7 @@ public:
   void init()
   {
     Serial.print("IMU init: ");
-    _bno = Adafruit_BNO055();
+    _bno = Adafruit_BNO055(-1, 0x29);
     if (!_bno.begin())
     {
       Serial.println("not found");
