@@ -158,6 +158,12 @@ void transmitData(State &state, RH_RF95 &rf95, TrackerGps &gps)
   newPacket.lon = gps.lon;
   newPacket.isAccurate = gps.isAccurate;
 
+  if (abs(newPacket.lat) < 1 || abs(newPacket.lon) < 1)
+  {
+    // GPS data is invalid. We are on null island.
+    return;
+  }
+
   state.sending = true;
   digitalWrite(LED_PIN, HIGH);
 
